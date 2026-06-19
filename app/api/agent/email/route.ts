@@ -3,7 +3,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { supabaseAdmin } from '@/lib/supabase'
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
+// ── Lazy Resend client — never instantiated at build time ─────
+function getResend() {
+  const key = process.env.RESEND_API_KEY
+  if (!key) throw new Error('Missing RESEND_API_KEY env var')
+  return new Resend(key)
+}
 
 // ── Generate + Send email ──────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -34,7 +39,8 @@ export async function POST(req: NextRequest) {
       htmlBody = htmlBody || generated.html
     }
 
-    // Send via Resend
+    // Send via Resend (lazy — only instantiated here at runtime)
+    const resend = getResend()
     const result = await resend.emails.send({
       from:    `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
       to:      lead.email,
@@ -102,8 +108,8 @@ Respond ONLY with valid JSON in this exact format, no markdown:
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'Content-Type':  'application/json',
-      'x-api-key':     process.env.ANTHROPIC_API_KEY!,
+      'Content-Type':      'application/json',
+      'x-api-key':         process.env.ANTHROPIC_API_KEY!,
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({

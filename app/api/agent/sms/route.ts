@@ -3,10 +3,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import twilio from 'twilio'
 import { supabaseAdmin } from '@/lib/supabase'
 
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID!,
-  process.env.TWILIO_AUTH_TOKEN!
-)
+// ── Lazy Twilio client — never instantiated at build time ─────
+function getTwilio() {
+  const sid   = process.env.TWILIO_ACCOUNT_SID
+  const token = process.env.TWILIO_AUTH_TOKEN
+  if (!sid || !token) throw new Error('Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars')
+  return twilio(sid, token)
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,8 +31,9 @@ export async function POST(req: NextRequest) {
 
     const smsBody = body_override || buildSMSBody(lead)
 
-    // Send via Twilio
-    const message = await twilioClient.messages.create({
+    // Send via Twilio (lazy — only instantiated here at runtime)
+    const client  = getTwilio()
+    const message = await client.messages.create({
       body: smsBody,
       from: process.env.TWILIO_PHONE_NUMBER!,
       to:   lead.phone,
@@ -48,9 +52,9 @@ export async function POST(req: NextRequest) {
 
     // Update lead
     await supabaseAdmin.from('leads').update({
-      status:       'Texted',
-      touches:      (lead.touches || 0) + 1,
-      last_contact: new Date().toISOString(),
+      status:        'Texted',
+      touches:       (lead.touches || 0) + 1,
+      last_contact:  new Date().toISOString(),
       next_followup: new Date(Date.now() + 2 * 86400000).toISOString(),
     }).eq('id', lead.id)
 
@@ -64,8 +68,8 @@ export async function POST(req: NextRequest) {
 // Handle inbound SMS replies from Twilio webhook
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const from  = searchParams.get('From')
-  const body  = searchParams.get('Body')
+  const from = searchParams.get('From')
+  const body = searchParams.get('Body')
 
   if (!from || !body) {
     return NextResponse.json({ error: 'Missing params' }, { status: 400 })
@@ -91,7 +95,6 @@ export async function GET(req: NextRequest) {
       result:    'received',
     })
 
-    // Move to Engaged if they replied
     await supabaseAdmin.from('leads').update({
       status:          'Engaged',
       last_contact:    new Date().toISOString(),
@@ -100,8 +103,10 @@ export async function GET(req: NextRequest) {
   }
 
   // Twilio expects TwiML response
-  return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`,
-    { headers: { 'Content-Type': 'text/xml' } })
+  return new Response(
+    `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`,
+    { headers: { 'Content-Type': 'text/xml' } }
+  )
 }
 
 function buildSMSBody(lead: any): string {
