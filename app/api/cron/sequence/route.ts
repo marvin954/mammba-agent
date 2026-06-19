@@ -1,18 +1,14 @@
 export async function GET(request: Request) {
-  const cronHeader = request.headers.get("x-vercel-cron");
+  const authHeader = request.headers.get("authorization");
 
-  if (!cronHeader) {
-    return new Response("Unauthorized", {
-      status: 401,
-    });
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
   }
 
-  // Put your scheduled work here
-
-  console.log("Cron executed");
+  console.log("Cron job ran");
 
   return Response.json({
     success: true,
-    timestamp: new Date().toISOString(),
+    ranAt: new Date().toISOString(),
   });
 }
