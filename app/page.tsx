@@ -10,7 +10,7 @@ type Lead = {
 }
 type LogEntry = {
   id: string; channel: string; summary: string; result: string
-  created_at: string; lead_id: string
+  body: string; created_at: string; lead_id: string
 }
 type ImportRow = {
   name: string; company: string; title?: string; phone?: string
@@ -26,13 +26,18 @@ const STATUS_COLORS: Record<string, string> = {
   'Closed Lost': '#FDECEA', 'On Hold': '#F1EFE8',
 }
 
-// ── Parse CSV text → array of objects ─────────────────────────
+const CH_ICON: Record<string, string> = {
+  call: '📞', rvm: '📳', sms: '💬', email: '✉️', note: '📝'
+}
+const CH_COLOR: Record<string, string> = {
+  call: '#EEEDFE', rvm: '#E6F1FB', sms: '#E1F5EE', email: '#FAEEDA', note: '#F4F6FA'
+}
+
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.trim().split(/\r?\n/)
   if (lines.length < 2) return []
   const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
   return lines.slice(1).map(line => {
-    // Handle quoted commas
     const cols: string[] = []
     let cur = '', inQ = false
     for (const ch of line) {
@@ -47,14 +52,11 @@ function parseCSV(text: string): Record<string, string>[] {
   })
 }
 
-// ── Validate + normalise a raw row ─────────────────────────────
 function normaliseRow(raw: Record<string, string>): ImportRow {
   const name    = (raw.name    || raw.Name    || raw.full_name   || '').trim()
   const company = (raw.company || raw.Company || raw.business    || raw['Company Name'] || '').trim()
-  const valid   = !!(name && company)
   return {
-    name,
-    company,
+    name, company,
     title:         (raw.title    || raw.Title    || raw.job_title   || '').trim(),
     phone:         (raw.phone    || raw.Phone    || raw.phone_number || '').trim(),
     email:         (raw.email    || raw.Email    || '').trim(),
@@ -65,17 +67,206 @@ function normaliseRow(raw: Record<string, string>): ImportRow {
     priority:      (['High','Medium','Low'].includes(raw.priority || raw.Priority || '')
                      ? (raw.priority || raw.Priority) : 'Medium'),
     notes:         (raw.notes   || raw.Notes    || '').trim(),
-    _valid: valid,
-    _error: valid ? undefined : 'Missing name or company',
+    _valid: !!(name && company),
+    _error: (name && company) ? undefined : 'Missing name or company',
   }
 }
 
 const CSV_TEMPLATE = `name,title,company,phone,email,county,tier,monthly_value,priority,notes
 Maria Santos,Operations Manager,Broward Health Medical Center,954-355-4400,msantos@example.com,Broward,Tier 1,"$4,000-$8,000",High,Inter-facility transfers
 James Ortega,Supply Chain Director,Memorial Regional Hospital,954-987-2000,jortega@example.com,Broward,Tier 1,"$4,000-$8,000",High,
-Carlos Rivera,Director of Logistics,Jackson Memorial Hospital,305-585-1111,crivera@example.com,Miami-Dade,Tier 1,"$6,000-$10,000",High,3 campuses
-Tom Beckford,VP of Supply Chain,Palm Beach Health Network,561-844-6300,tbeckford@example.com,Palm Beach,Tier 1,"$6,000-$10,000",High,7 hospitals`
+Carlos Rivera,Director of Logistics,Jackson Memorial Hospital,305-585-1111,crivera@example.com,Miami-Dade,Tier 1,"$6,000-$10,000",High,3 campuses`
 
+// ── Message Preview Modal ──────────────────────────────────────
+function MessageModal({ entry, onClose }: { entry: LogEntry; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const channelLabel: Record<string, string> = {
+    call: 'AI Call Script', rvm: 'Ringless Voicemail', sms: 'SMS Text', email: 'Email', note: 'Note'
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, padding: '1rem'
+    }} onClick={onClose}>
+      <div style={{
+        background: '#fff', borderRadius: 12, width: '100%', maxWidth: 560,
+        maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+      }} onClick={e => e.stopPropagation()}>
+
+        {/* Modal header */}
+        <div style={{
+          background: '#0A1628', padding: '14px 18px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          borderRadius: '12px 12px 0 0'
+        }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#C9A84C' }}>
+              {CH_ICON[entry.channel] || '📋'} {channelLabel[entry.channel] || 'Message'}
+            </div>
+            <div style={{ fontSize: 12, color: '#8899BB', marginTop: 2 }}>
+              {new Date(entry.created_at).toLocaleString()} · {entry.result || 'sent'}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', color: '#8899BB',
+            fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '2px 6px'
+          }}>✕</button>
+        </div>
+
+        {/* Summary bar */}
+        <div style={{
+          background: '#F4F6FA', padding: '10px 18px',
+          fontSize: 13, color: '#1A2540', borderBottom: '1px solid #DDE3F0'
+        }}>
+          {entry.summary}
+        </div>
+
+        {/* Message body */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '18px' }}>
+          {entry.body ? (
+            <pre style={{
+              fontFamily: 'system-ui, sans-serif', fontSize: 13.5,
+              lineHeight: 1.7, color: '#1A2540', whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word', margin: 0,
+              background: entry.channel === 'email' ? '#FAFBFF' : 'transparent',
+              padding: entry.channel === 'email' ? '12px 14px' : 0,
+              borderRadius: entry.channel === 'email' ? 8 : 0,
+              border: entry.channel === 'email' ? '1px solid #DDE3F0' : 'none'
+            }}>
+              {/* Strip HTML tags for display if email */}
+              {entry.channel === 'email'
+                ? entry.body.replace(/<[^>]+>/g, '').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').trim()
+                : entry.body}
+            </pre>
+          ) : (
+            <p style={{ color: '#6B7A99', fontSize: 13, fontStyle: 'italic' }}>
+              No message body recorded for this entry.
+            </p>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div style={{
+          padding: '12px 18px', borderTop: '1px solid #DDE3F0',
+          display: 'flex', gap: 8, justifyContent: 'flex-end'
+        }}>
+          <button onClick={() => {
+            navigator.clipboard.writeText(entry.body || entry.summary)
+          }} style={{
+            padding: '7px 14px', borderRadius: 8, border: '1px solid #DDE3F0',
+            background: '#F4F6FA', fontSize: 13, cursor: 'pointer', color: '#1A2540'
+          }}>
+            Copy text
+          </button>
+          <button onClick={onClose} style={{
+            padding: '7px 14px', borderRadius: 8, border: 'none',
+            background: '#0A1628', color: '#C9A84C', fontSize: 13,
+            fontWeight: 500, cursor: 'pointer'
+          }}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Inline message preview (in lead row) ───────────────────────
+function MessagePreviewDrawer({ leadId, onClose }: { leadId: string; onClose: () => void }) {
+  const [messages, setMessages] = useState<LogEntry[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [selected, setSelected] = useState<LogEntry | null>(null)
+
+  useEffect(() => {
+    fetch('/api/leads')
+      .then(r => r.json())
+      .then(data => {
+        const lead = Array.isArray(data) ? data.find((l: any) => l.id === leadId) : null
+        const log  = lead?.activity_log || []
+        log.sort((a: LogEntry, b: LogEntry) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        setMessages(log)
+        setLoading(false)
+      })
+  }, [leadId])
+
+  return (
+    <>
+      {selected && <MessageModal entry={selected} onClose={() => setSelected(null)} />}
+      <div style={{
+        position: 'fixed', right: 0, top: 0, bottom: 0, width: 340,
+        background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
+        zIndex: 1000, display: 'flex', flexDirection: 'column'
+      }}>
+        {/* Drawer header */}
+        <div style={{ background: '#0A1628', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#C9A84C' }}>Message History</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8899BB', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          {loading && <p style={{ padding: '1rem', color: '#888', fontSize: 13 }}>Loading…</p>}
+          {!loading && messages.length === 0 && (
+            <p style={{ padding: '1rem', color: '#888', fontSize: 13, fontStyle: 'italic' }}>
+              No messages sent yet for this lead.
+            </p>
+          )}
+          {messages.map((msg, i) => (
+            <div key={msg.id} style={{
+              borderTop: i > 0 ? '1px solid #f0f0f0' : 'none',
+              padding: '12px 14px', cursor: 'pointer',
+              background: 'transparent', transition: 'background .1s'
+            }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F4F6FA')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => setSelected(msg)}
+            >
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <div style={{
+                  width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                  background: CH_COLOR[msg.channel] || '#F4F6FA',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14
+                }}>
+                  {CH_ICON[msg.channel] || '📋'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: '#1A2540' }}>
+                    {msg.channel.toUpperCase()}
+                    <span style={{ fontWeight: 400, color: '#6B7A99', marginLeft: 6 }}>
+                      {msg.result || 'sent'}
+                    </span>
+                  </div>
+                  <div style={{
+                    fontSize: 12, color: '#6B7A99',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                  }}>
+                    {msg.body
+                      ? msg.body.replace(/<[^>]+>/g, '').slice(0, 60) + (msg.body.length > 60 ? '…' : '')
+                      : msg.summary.slice(0, 60)}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#A0AECC', marginTop: 2 }}>
+                    {new Date(msg.created_at).toLocaleString()}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: '#C9A84C', flexShrink: 0 }}>View →</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
 export default function Dashboard() {
   const [leads, setLeads]             = useState<Lead[]>([])
   const [log, setLog]                 = useState<LogEntry[]>([])
@@ -86,8 +277,9 @@ export default function Dashboard() {
   const [agentOn, setAgentOn]         = useState(true)
   const [toast, setToast]             = useState('')
   const [toastType, setToastType]     = useState<'ok'|'err'>('ok')
+  const [selectedMsg, setSelectedMsg] = useState<LogEntry | null>(null)
+  const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null)
 
-  // Import state
   const [importRows, setImportRows]   = useState<ImportRow[]>([])
   const [importFile, setImportFile]   = useState('')
   const [importLoading, setImpLoad]   = useState(false)
@@ -95,7 +287,6 @@ export default function Dashboard() {
   const [dragOver, setDragOver]       = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Add lead state
   const [newLead, setNewLead] = useState({
     name:'', title:'', company:'', phone:'', email:'',
     county:'Broward', tier:'Tier 1', monthly_value:'', priority:'High', notes:''
@@ -125,16 +316,14 @@ export default function Dashboard() {
       if (Array.isArray(l.activity_log)) all.push(...l.activity_log)
     })
     all.sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    setLog(all.slice(0, 30))
+    setLog(all.slice(0, 60))
   }
 
   useEffect(() => { loadLeads() }, [loadLeads])
   useEffect(() => { if (tab === 'log') loadLog() }, [tab])
 
-  // ── File parse ───────────────────────────────────────────────
   const processFile = (file: File) => {
-    setImportFile(file.name)
-    setImpResult(null)
+    setImportFile(file.name); setImpResult(null)
     const reader = new FileReader()
     reader.onload = (e) => {
       const text = e.target?.result as string
@@ -144,56 +333,44 @@ export default function Dashboard() {
           const parsed = JSON.parse(text)
           rawRows = Array.isArray(parsed) ? parsed : parsed.leads || []
         } else {
-          // CSV (also handles .txt)
           rawRows = parseCSV(text)
         }
         const rows = rawRows.map(normaliseRow)
         setImportRows(rows)
         const valid = rows.filter(r => r._valid).length
-        notify(`Parsed ${rows.length} rows — ${valid} valid, ${rows.length - valid} skipped`, valid > 0 ? 'ok' : 'err')
-      } catch (err: any) {
-        notify(`Parse error: ${err.message}`, 'err')
-      }
+        notify(`Parsed ${rows.length} rows — ${valid} valid`, valid > 0 ? 'ok' : 'err')
+      } catch (err: any) { notify(`Parse error: ${err.message}`, 'err') }
     }
     reader.readAsText(file)
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) processFile(file)
+    const file = e.target.files?.[0]; if (file) processFile(file)
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) processFile(file)
+    const file = e.dataTransfer.files?.[0]; if (file) processFile(file)
   }
 
-  // ── Upload to Supabase ───────────────────────────────────────
   const handleImport = async () => {
     const valid = importRows.filter(r => r._valid)
     if (valid.length === 0) { notify('No valid rows to import', 'err'); return }
     setImpLoad(true)
     try {
       const res  = await fetch('/api/leads/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leads: valid }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setImpResult({ inserted: data.inserted, skipped: data.skipped })
-      notify(`Imported ${data.inserted} leads successfully`, 'ok')
-      setImportRows([]); setImportFile('')
-      loadLeads()
-    } catch (err: any) {
-      notify(`Import failed: ${err.message}`, 'err')
-    } finally {
-      setImpLoad(false)
-    }
+      notify(`Imported ${data.inserted} leads`, 'ok')
+      setImportRows([]); setImportFile(''); loadLeads()
+    } catch (err: any) { notify(`Import failed: ${err.message}`, 'err') }
+    finally { setImpLoad(false) }
   }
 
-  // ── Download CSV template ────────────────────────────────────
   const downloadTemplate = () => {
     const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv' })
     const url  = URL.createObjectURL(blob)
@@ -202,36 +379,27 @@ export default function Dashboard() {
     URL.revokeObjectURL(url)
   }
 
-  // ── Single action trigger ────────────────────────────────────
   const trigger = async (lead: Lead, action: string) => {
     const displayName = lead.name || lead.company || 'lead'
     notify(`Sending ${action.toUpperCase()} to ${displayName}…`)
     try {
       const res  = await fetch(`/api/agent/${action}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lead_id: lead.id }),
       })
       const data = await res.json()
-      if (res.ok) {
-        notify(`${action.toUpperCase()} sent to ${displayName}`)
-        loadLeads()
-      } else {
-        // Show friendly message for unconfigured APIs
+      if (res.ok) { notify(`${action.toUpperCase()} sent to ${displayName}`); loadLeads() }
+      else {
         const msg = data.error || 'Unknown error'
         notify(msg.length > 80 ? msg.slice(0, 80) + '…' : msg, 'err')
       }
-    } catch (err: any) {
-      notify(`Network error: ${err.message}`, 'err')
-    }
+    } catch (err: any) { notify(`Network error: ${err.message}`, 'err') }
   }
 
-  // ── Add single lead ──────────────────────────────────────────
   const addLead = async () => {
     if (!newLead.name || !newLead.company) { notify('Name and company required', 'err'); return }
     const res = await fetch('/api/leads', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newLead),
     })
     if (res.ok) {
@@ -249,7 +417,6 @@ export default function Dashboard() {
     newL:    leads.filter(l => l.status === 'New').length,
   }
 
-  // ── Shared input style ───────────────────────────────────────
   const inp: React.CSSProperties = {
     width:'100%', padding:'8px 10px', borderRadius:6,
     border:'1px solid #ddd', fontSize:13, boxSizing:'border-box'
@@ -263,12 +430,25 @@ export default function Dashboard() {
     <div style={{ padding:'1.5rem', maxWidth:1100, margin:'0 auto',
                   fontFamily:'system-ui,sans-serif', fontSize:14 }}>
 
+      {/* Message Detail Modal */}
+      {selectedMsg && <MessageModal entry={selectedMsg} onClose={() => setSelectedMsg(null)} />}
+
+      {/* Message History Drawer */}
+      {drawerLeadId && (
+        <MessagePreviewDrawer
+          leadId={drawerLeadId}
+          onClose={() => setDrawerLeadId(null)}
+        />
+      )}
+
       {/* Toast */}
       {toast && (
-        <div style={{ position:'fixed', top:20, right:20, zIndex:1000,
-                      background: toastType==='err' ? '#A32D2D' : '#1A2540',
-                      color:'#fff', padding:'10px 18px', borderRadius:8, fontSize:13,
-                      boxShadow:'0 4px 12px rgba(0,0,0,.2)' }}>
+        <div style={{
+          position:'fixed', top:20, right:20, zIndex:2000,
+          background: toastType==='err' ? '#A32D2D' : '#1A2540',
+          color:'#fff', padding:'10px 18px', borderRadius:8, fontSize:13,
+          boxShadow:'0 4px 12px rgba(0,0,0,.2)', maxWidth: 360
+        }}>
           {toast}
         </div>
       )}
@@ -309,7 +489,7 @@ export default function Dashboard() {
 
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:'1rem', flexWrap:'wrap' }}>
-        {[['leads','Pipeline'],['upload','Upload Leads'],['add','Add One'],['log','Activity']]
+        {[['leads','Pipeline'],['upload','Upload Leads'],['add','Add One'],['log','Activity Log']]
           .map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)}
             style={btn({ background: tab===t ? '#E6F1FB' : '#fff',
@@ -351,43 +531,56 @@ export default function Dashboard() {
               )}
               {leads.map((lead, i) => (
                 <div key={lead.id}
-                  style={{ display:'grid', gridTemplateColumns:'1fr 120px 100px 180px',
-                           gap:10, padding:'12px 16px', alignItems:'center',
-                           borderTop: i > 0 ? '1px solid #f0f0f0' : 'none' }}>
-                  <div>
-                    <div style={{ fontWeight:500 }}>{lead.name}</div>
-                    <div style={{ fontSize:12, color:'#666' }}>{lead.company} · {lead.county}</div>
-                    <div style={{ fontSize:12, color:'#888' }}>{lead.title}</div>
-                    {lead.monthly_value && (
-                      <div style={{ fontSize:11, color:'#3B6D11', marginTop:2 }}>
-                        {lead.monthly_value}/mo
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <span style={{ background: STATUS_COLORS[lead.status]||'#F4F6FA',
-                                   padding:'3px 10px', borderRadius:12,
-                                   fontSize:11, fontWeight:500 }}>
-                      {lead.status}
-                    </span>
-                    <div style={{ fontSize:11, color:'#888', marginTop:4 }}>
-                      {lead.touches||0} touches
+                  style={{ padding:'12px 16px', borderTop: i > 0 ? '1px solid #f0f0f0' : 'none' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 100px auto', gap:10, alignItems:'center' }}>
+                    <div>
+                      <div style={{ fontWeight:500 }}>{lead.name || '—'}</div>
+                      <div style={{ fontSize:12, color:'#666' }}>{lead.company} · {lead.county}</div>
+                      <div style={{ fontSize:12, color:'#888' }}>{lead.title}</div>
+                      {lead.monthly_value && (
+                        <div style={{ fontSize:11, color:'#3B6D11', marginTop:2 }}>
+                          {lead.monthly_value}/mo
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <div style={{ fontSize:12, color:'#666' }}>
-                    Step {lead.sequence_step||0}/10
-                    {lead.sequence_paused && (
-                      <div style={{ color:'#BA7517', fontSize:11 }}>Paused</div>
-                    )}
-                  </div>
-                  <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                    {[['rvm','RVM'],['call','Call'],['sms','SMS'],['email','Email']]
-                      .map(([action, label]) => (
-                      <button key={action} onClick={() => trigger(lead, action)}
-                        style={btn({ fontSize:11, padding:'4px 8px' })}>
-                        {label}
+                    <div>
+                      <span style={{ background: STATUS_COLORS[lead.status]||'#F4F6FA',
+                                     padding:'3px 10px', borderRadius:12,
+                                     fontSize:11, fontWeight:500 }}>
+                        {lead.status}
+                      </span>
+                      <div style={{ fontSize:11, color:'#888', marginTop:4 }}>
+                        {lead.touches||0} touches
+                      </div>
+                    </div>
+                    <div style={{ fontSize:12, color:'#666' }}>
+                      Step {lead.sequence_step||0}/10
+                      {lead.sequence_paused && (
+                        <div style={{ color:'#BA7517', fontSize:11 }}>Paused</div>
+                      )}
+                    </div>
+                    <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
+                      {[['rvm','📳'],['call','📞'],['sms','💬'],['email','✉️']]
+                        .map(([action, icon]) => (
+                        <button key={action} onClick={() => trigger(lead, action)}
+                          title={action.toUpperCase()}
+                          style={btn({ fontSize:16, padding:'4px 8px', lineHeight:1 })}>
+                          {icon}
+                        </button>
+                      ))}
+                      {/* View messages button */}
+                      <button
+                        onClick={() => setDrawerLeadId(lead.id)}
+                        title="View all messages sent to this lead"
+                        style={btn({
+                          fontSize:11, padding:'4px 10px',
+                          background: drawerLeadId===lead.id ? '#0A1628' : '#F4F6FA',
+                          color:      drawerLeadId===lead.id ? '#C9A84C' : '#555',
+                          borderColor: '#ddd'
+                        })}>
+                        History
                       </button>
-                    ))}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -399,82 +592,44 @@ export default function Dashboard() {
       {/* ── UPLOAD TAB ── */}
       {tab === 'upload' && (
         <div>
-
-          {/* Instructions card */}
           <div style={{ background:'#F4F6FA', border:'1px solid #DDE3F0',
                         borderRadius:10, padding:'1rem 1.25rem', marginBottom:'1rem' }}>
             <div style={{ display:'flex', justifyContent:'space-between',
                           alignItems:'center', flexWrap:'wrap', gap:8 }}>
               <div>
-                <div style={{ fontWeight:500, marginBottom:4 }}>
-                  Upload leads via CSV or JSON
-                </div>
-                <div style={{ fontSize:13, color:'#666', lineHeight:1.6 }}>
-                  Accepted formats: <strong>.csv</strong>, <strong>.json</strong>, <strong>.txt</strong>
-                  &nbsp;—&nbsp;Required columns: <code>name</code>, <code>company</code>.
-                  All other columns are optional.
+                <div style={{ fontWeight:500, marginBottom:4 }}>Upload leads via CSV or JSON</div>
+                <div style={{ fontSize:13, color:'#666' }}>
+                  Required: <code>name</code>, <code>company</code> — everything else optional.
                 </div>
               </div>
               <button onClick={downloadTemplate}
-                style={btn({ background:'#0A1628', color:'#C9A84C',
-                             borderColor:'#0A1628', fontWeight:500 })}>
+                style={btn({ background:'#0A1628', color:'#C9A84C', borderColor:'#0A1628', fontWeight:500 })}>
                 Download template CSV
               </button>
             </div>
-
-            {/* Column reference */}
-            <div style={{ marginTop:'1rem', display:'grid',
-                          gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:6 }}>
-              {[
-                ['name *',        'Full name of contact'],
-                ['company *',     'Company or facility name'],
-                ['title',         'Job title'],
-                ['phone',         'Phone number'],
-                ['email',         'Email address'],
-                ['county',        'Broward / Miami-Dade / Palm Beach'],
-                ['tier',          'Tier 1 – Tier 5'],
-                ['monthly_value', 'Est. monthly contract value'],
-                ['priority',      'High / Medium / Low'],
-                ['notes',         'Any notes'],
-              ].map(([col, desc]) => (
-                <div key={col} style={{ fontSize:12 }}>
-                  <code style={{ background:'#E8ECF5', padding:'1px 6px',
-                                  borderRadius:4, fontWeight:500 }}>{col}</code>
-                  <span style={{ color:'#888', marginLeft:6 }}>{desc}</span>
-                </div>
-              ))}
-            </div>
           </div>
 
-          {/* Drop zone */}
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true) }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
             onClick={() => fileRef.current?.click()}
-            style={{ border: `2px dashed ${dragOver ? '#0C447C' : '#CBD3E8'}`,
-                     borderRadius:10, padding:'2.5rem',
-                     textAlign:'center', cursor:'pointer',
-                     background: dragOver ? '#EAF1FD' : '#FAFBFF',
-                     transition:'all .15s', marginBottom:'1rem' }}>
+            style={{ border:`2px dashed ${dragOver ? '#0C447C' : '#CBD3E8'}`,
+                     borderRadius:10, padding:'2.5rem', textAlign:'center', cursor:'pointer',
+                     background: dragOver ? '#EAF1FD' : '#FAFBFF', marginBottom:'1rem' }}>
             <div style={{ fontSize:32, marginBottom:8 }}>📂</div>
             <div style={{ fontWeight:500, marginBottom:4 }}>
               {importFile ? `📄 ${importFile}` : 'Drop your CSV or JSON file here'}
             </div>
-            <div style={{ fontSize:13, color:'#888' }}>
-              or click to browse — .csv, .json, .txt accepted
-            </div>
+            <div style={{ fontSize:13, color:'#888' }}>or click to browse</div>
             <input ref={fileRef} type="file" accept=".csv,.json,.txt"
               onChange={handleFileInput} style={{ display:'none' }} />
           </div>
 
-          {/* Preview table */}
           {importRows.length > 0 && (
-            <div style={{ background:'#fff', border:'1px solid #eee',
-                          borderRadius:10, marginBottom:'1rem', overflow:'auto' }}>
+            <div style={{ background:'#fff', border:'1px solid #eee', borderRadius:10, marginBottom:'1rem', overflow:'auto' }}>
               <div style={{ padding:'12px 16px', borderBottom:'1px solid #f0f0f0',
-                            display:'flex', justifyContent:'space-between',
-                            alignItems:'center', flexWrap:'wrap', gap:8 }}>
+                            display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
                 <div>
                   <span style={{ fontWeight:500 }}>Preview — {importRows.length} rows</span>
                   <span style={{ marginLeft:10, fontSize:12, color:'#3B6D11' }}>
@@ -487,84 +642,45 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
-                  <button onClick={() => { setImportRows([]); setImportFile('') }}
-                    style={btn({ color:'#A32D2D' })}>
-                    Clear
-                  </button>
+                  <button onClick={() => { setImportRows([]); setImportFile('') }} style={btn({ color:'#A32D2D' })}>Clear</button>
                   <button onClick={handleImport} disabled={importLoading}
-                    style={btn({ background:'#0A1628', color:'#C9A84C',
-                                 borderColor:'#0A1628', fontWeight:500,
-                                 opacity: importLoading ? 0.6 : 1 })}>
-                    {importLoading
-                      ? `Importing…`
-                      : `Import ${importRows.filter(r=>r._valid).length} leads`}
+                    style={btn({ background:'#0A1628', color:'#C9A84C', borderColor:'#0A1628', fontWeight:500 })}>
+                    {importLoading ? 'Importing…' : `Import ${importRows.filter(r=>r._valid).length} leads`}
                   </button>
                 </div>
               </div>
-
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
                   <tr style={{ background:'#F4F6FA' }}>
-                    {['','Name','Company','Title','Phone','Email','County','Priority','Value'].map(h => (
-                      <th key={h} style={{ padding:'8px 10px', textAlign:'left',
-                                           fontWeight:500, color:'#555',
-                                           borderBottom:'1px solid #eee', whiteSpace:'nowrap' }}>
-                        {h}
-                      </th>
+                    {['','Name','Company','Title','Phone','Email','County','Priority'].map(h => (
+                      <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontWeight:500, color:'#555', borderBottom:'1px solid #eee' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {importRows.slice(0, 50).map((row, i) => (
+                  {importRows.slice(0,50).map((row,i) => (
                     <tr key={i} style={{ background: row._valid ? '#fff' : '#FFF5F5' }}>
                       <td style={{ padding:'7px 10px', borderBottom:'1px solid #f5f5f5' }}>
-                        {row._valid
-                          ? <span style={{ color:'#3B6D11', fontWeight:600 }}>✓</span>
-                          : <span title={row._error} style={{ color:'#A32D2D', cursor:'help' }}>✗</span>}
+                        {row._valid ? <span style={{ color:'#3B6D11' }}>✓</span> : <span style={{ color:'#A32D2D' }}>✗</span>}
                       </td>
-                      {[row.name, row.company, row.title||'—', row.phone||'—',
-                        row.email||'—', row.county||'Broward', row.priority||'Medium',
-                        row.monthly_value||'—'].map((val, j) => (
-                        <td key={j} style={{ padding:'7px 10px',
-                                             borderBottom:'1px solid #f5f5f5',
-                                             maxWidth:160, overflow:'hidden',
-                                             textOverflow:'ellipsis', whiteSpace:'nowrap',
-                                             color: row._valid ? '#222' : '#A32D2D' }}>
-                          {val}
-                        </td>
+                      {[row.name,row.company,row.title||'—',row.phone||'—',row.email||'—',row.county||'Broward',row.priority||'Medium'].map((val,j) => (
+                        <td key={j} style={{ padding:'7px 10px', borderBottom:'1px solid #f5f5f5', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color: row._valid ? '#222' : '#A32D2D' }}>{val}</td>
                       ))}
                     </tr>
                   ))}
-                  {importRows.length > 50 && (
-                    <tr>
-                      <td colSpan={9} style={{ padding:'8px 12px', color:'#888',
-                                               fontSize:12, fontStyle:'italic' }}>
-                        Showing first 50 of {importRows.length} rows…
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
           )}
 
-          {/* Success result */}
           {importResult && (
-            <div style={{ background:'#EAF3DE', border:'1px solid #B8DFAD',
-                          borderRadius:10, padding:'1rem 1.25rem' }}>
-              <div style={{ fontWeight:500, color:'#3B6D11', fontSize:15 }}>
-                ✓ Import complete
-              </div>
+            <div style={{ background:'#EAF3DE', border:'1px solid #B8DFAD', borderRadius:10, padding:'1rem 1.25rem' }}>
+              <div style={{ fontWeight:500, color:'#3B6D11', fontSize:15 }}>✓ Import complete</div>
               <div style={{ fontSize:13, color:'#555', marginTop:4 }}>
-                <strong>{importResult.inserted}</strong> leads imported and added to your pipeline.
-                {importResult.skipped > 0 && (
-                  <> <strong>{importResult.skipped}</strong> rows skipped (missing name or company).</>
-                )}
-                <> The sequence will begin at the next cron run (Mon–Fri 8:30 AM ET).</>
+                <strong>{importResult.inserted}</strong> leads imported.
+                {importResult.skipped > 0 && <> <strong>{importResult.skipped}</strong> skipped.</>}
               </div>
-              <button onClick={() => setTab('leads')}
-                style={btn({ marginTop:10, background:'#3B6D11',
-                             color:'#fff', borderColor:'#3B6D11' })}>
+              <button onClick={() => setTab('leads')} style={btn({ marginTop:10, background:'#3B6D11', color:'#fff', borderColor:'#3B6D11' })}>
                 View leads →
               </button>
             </div>
@@ -574,40 +690,32 @@ export default function Dashboard() {
 
       {/* ── ADD SINGLE LEAD TAB ── */}
       {tab === 'add' && (
-        <div style={{ background:'#fff', border:'1px solid #eee',
-                      borderRadius:10, padding:'1.25rem' }}>
+        <div style={{ background:'#fff', border:'1px solid #eee', borderRadius:10, padding:'1.25rem' }}>
           <h3 style={{ margin:'0 0 1rem', fontWeight:500, fontSize:16 }}>Add a single lead</h3>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:12 }}>
             {([['name','Full name *'],['title','Job title'],['company','Company *'],
                ['phone','Phone'],['email','Email'],['monthly_value','Est. monthly value'],
                ['notes','Notes']] as [string,string][]).map(([key, label]) => (
               <div key={key} style={{ gridColumn: key==='notes' ? '1 / -1' : 'auto' }}>
-                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>
-                  {label}
-                </label>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>{label}</label>
                 <input value={(newLead as any)[key]}
-                  onChange={e => setNewLead(p => ({...p, [key]: e.target.value}))}
-                  style={inp} />
+                  onChange={e => setNewLead(p => ({...p, [key]: e.target.value}))} style={inp} />
               </div>
             ))}
             <div>
               <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>County</label>
-              <select value={newLead.county}
-                onChange={e => setNewLead(p => ({...p, county: e.target.value}))} style={inp as any}>
+              <select value={newLead.county} onChange={e => setNewLead(p => ({...p, county: e.target.value}))} style={inp as any}>
                 {['Broward','Miami-Dade','Palm Beach'].map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Priority</label>
-              <select value={newLead.priority}
-                onChange={e => setNewLead(p => ({...p, priority: e.target.value}))} style={inp as any}>
+              <select value={newLead.priority} onChange={e => setNewLead(p => ({...p, priority: e.target.value}))} style={inp as any}>
                 {['High','Medium','Low'].map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
           </div>
-          <button onClick={addLead}
-            style={btn({ marginTop:'1rem', background:'#0A1628',
-                         color:'#C9A84C', borderColor:'#0A1628', fontWeight:500 })}>
+          <button onClick={addLead} style={btn({ marginTop:'1rem', background:'#0A1628', color:'#C9A84C', borderColor:'#0A1628', fontWeight:500 })}>
             Add lead + start sequence
           </button>
         </div>
@@ -616,35 +724,48 @@ export default function Dashboard() {
       {/* ── ACTIVITY LOG TAB ── */}
       {tab === 'log' && (
         <div style={{ background:'#fff', border:'1px solid #eee', borderRadius:10 }}>
+          <div style={{ padding:'12px 16px', borderBottom:'1px solid #f0f0f0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span style={{ fontWeight:500, fontSize:14 }}>Activity Log</span>
+            <span style={{ fontSize:12, color:'#888' }}>{log.length} events — click any to read full message</span>
+          </div>
           {log.length === 0 && (
             <p style={{ padding:'2rem', color:'#888', textAlign:'center' }}>No activity yet.</p>
           )}
-          {log.map((entry, i) => {
-            const colors: Record<string, string> = {
-              call:'#EEEDFE', rvm:'#E6F1FB', sms:'#E1F5EE', email:'#FAEEDA', note:'#F4F6FA'
-            }
-            const icons: Record<string, string> = {
-              call:'📞', rvm:'📳', sms:'💬', email:'✉️', note:'📝'
-            }
-            return (
-              <div key={entry.id}
-                style={{ display:'flex', gap:12, padding:'10px 16px', alignItems:'flex-start',
-                         borderTop: i > 0 ? '1px solid #f0f0f0' : 'none' }}>
-                <div style={{ width:32, height:32, borderRadius:'50%',
-                               background: colors[entry.channel]||'#F4F6FA',
-                               display:'flex', alignItems:'center',
-                               justifyContent:'center', fontSize:14, flexShrink:0 }}>
-                  {icons[entry.channel]||'📋'}
-                </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13 }}>{entry.summary}</div>
-                  <div style={{ fontSize:11, color:'#888', marginTop:2 }}>
-                    {new Date(entry.created_at).toLocaleString()} · {entry.result||''}
+          {log.map((entry, i) => (
+            <div key={entry.id}
+              style={{
+                display:'flex', gap:12, padding:'10px 16px', alignItems:'flex-start',
+                borderTop: i > 0 ? '1px solid #f0f0f0' : 'none',
+                cursor: 'pointer', transition: 'background .1s'
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F4F6FA')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => setSelectedMsg(entry)}
+            >
+              <div style={{ width:32, height:32, borderRadius:'50%',
+                             background: CH_COLOR[entry.channel]||'#F4F6FA',
+                             display:'flex', alignItems:'center',
+                             justifyContent:'center', fontSize:14, flexShrink:0 }}>
+                {CH_ICON[entry.channel]||'📋'}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13 }}>{entry.summary}</div>
+                {entry.body && (
+                  <div style={{ fontSize:12, color:'#6B7A99', marginTop:2,
+                                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {entry.body.replace(/<[^>]+>/g,'').slice(0,80)}
+                    {entry.body.length > 80 ? '…' : ''}
                   </div>
+                )}
+                <div style={{ fontSize:11, color:'#A0AECC', marginTop:2 }}>
+                  {new Date(entry.created_at).toLocaleString()} · {entry.result||''}
                 </div>
               </div>
-            )
-          })}
+              <div style={{ fontSize:11, color:'#C9A84C', flexShrink:0, paddingTop:2 }}>
+                View →
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
