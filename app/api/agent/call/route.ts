@@ -6,7 +6,15 @@ export async function POST(req: NextRequest) {
   try {
     const { lead_id, script_override } = await req.json()
 
-    // Fetch lead from Supabase
+    // ── Guard: API key configured? ─────────────────────────
+    const blandKey = process.env.BLAND_API_KEY
+    if (!blandKey || blandKey.trim() === '') {
+      return NextResponse.json(
+        { error: 'Bland.ai API key not configured. Add BLAND_API_KEY to your Vercel environment variables.' },
+        { status: 400 }
+      )
+    }
+
     const { data: lead, error } = await supabaseAdmin
       .from('leads')
       .select('*')
@@ -17,19 +25,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
     }
 
-    if (!lead.phone || lead.phone === 'N/A') {
-      return NextResponse.json({ error: 'No phone number for this lead' }, { status: 400 })
+    // ── Guard: phone number present? ───────────────────────
+    if (!lead.phone || lead.phone === 'N/A' || lead.phone.trim() === '') {
+      return NextResponse.json(
+        { error: `No phone number on file for ${lead.name ?? 'this lead'}. Add a phone number in the CRM first.` },
+        { status: 400 }
+      )
     }
 
-    // Build dynamic call script for Bland.ai
     const callScript = script_override || buildCallScript(lead)
 
-    // Send to Bland.ai
+    // ── App URL for webhook ────────────────────────────────
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? ''
+    const webhookUrl = appUrl ? `${appUrl}/api/webhooks/bland` : undefined
+
     const blandRes = await fetch('https://api.bland.ai/v1/calls', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'authorization': process.env.BLAND_API_KEY!,
+        'authorization': blandKey,
       },
       body: JSON.stringify({
         phone_number: lead.phone,
@@ -38,15 +52,15 @@ export async function POST(req: NextRequest) {
         reduce_latency: true,
         max_duration: 10,
         record: true,
-        metadata: { lead_id: lead.id, company: lead.company },
-        webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/bland`,
+        metadata: { lead_id: lead.id, company: lead.company ?? '' },
+        ...(webhookUrl ? { webhook: webhookUrl } : {}),
         analysis_prompt: `Did the prospect agree to a meeting or request a proposal? Summarize the outcome in 1-2 sentences.`,
         analysis_schema: {
-          agreed_to_meeting: 'boolean',
-          requested_proposal: 'boolean',
-          callback_requested: 'boolean',
-          outcome_summary: 'string',
-          objection_raised: 'string',
+          agreed_to_meeting:   'boolean',
+          requested_proposal:  'boolean',
+          callback_requested:  'boolean',
+          outcome_summary:     'string',
+          objection_raised:    'string',
         }
       })
     })
@@ -54,22 +68,23 @@ export async function POST(req: NextRequest) {
     const blandData = await blandRes.json()
 
     if (!blandRes.ok) {
-      return NextResponse.json({ error: 'Bland.ai error', details: blandData }, { status: 500 })
+      return NextResponse.json(
+        { error: `Bland.ai error: ${blandData?.message ?? blandData?.error ?? JSON.stringify(blandData)}` },
+        { status: 500 }
+      )
     }
 
-    // Log activity in Supabase
     await supabaseAdmin.from('activity_log').insert({
-      lead_id: lead.id,
-      channel: 'call',
+      lead_id:   lead.id,
+      channel:   'call',
       direction: 'outbound',
-      summary: `AI call initiated to ${lead.name} at ${lead.company}`,
-      result: 'initiated',
+      summary:   `AI call initiated to ${lead.name ?? 'lead'} at ${lead.company ?? ''}`,
+      result:    'initiated',
     })
 
-    // Update lead status and touch count
     await supabaseAdmin.from('leads').update({
-      status: 'Called',
-      touches: (lead.touches || 0) + 1,
+      status:       'Called',
+      touches:      (lead.touches || 0) + 1,
       last_contact: new Date().toISOString(),
     }).eq('id', lead.id)
 
@@ -80,28 +95,44 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function buildCallScript(lead: any): string {
-  return `You are a professional sales representative for M.A.M.M.B.A Enterprises LLC, 
-South Florida's premier medical courier and logistics company. You are calling ${lead.name}, 
-who is the ${lead.title} at ${lead.company} in ${lead.county} County.
+// ── Safe helpers ───────────────────────────────────────────────
+function firstName(name: string | null | undefined): string {
+  if (!name || name.trim() === '') return 'there'
+  return name.trim().split(' ')[0]
+}
 
-Your goal is to have a brief, respectful conversation to explore whether M.A.M.M.B.A can 
+function safe(val: string | null | undefined, fallback = ''): string {
+  return val?.trim() || fallback
+}
+
+function buildCallScript(lead: any): string {
+  const name    = safe(lead.name,    'the contact')
+  const title   = safe(lead.title,   'team member')
+  const company = safe(lead.company, 'your organization')
+  const county  = safe(lead.county,  'South Florida')
+  const first   = firstName(lead.name)
+
+  return `You are a professional sales representative for M.A.M.M.B.A Enterprises LLC,
+South Florida's premier medical courier and logistics company. You are calling ${name},
+who is the ${title} at ${company} in ${county} County.
+
+Your goal is to have a brief, respectful conversation to explore whether M.A.M.M.B.A can
 help them with same-day delivery, scheduled courier routes, or medical specimen transport.
 
-OPENING: "Hi, may I speak with ${lead.name}? … Hi ${lead.name.split(' ')[0]}, 
-this is calling from M.A.M.M.B.A Enterprises LLC. We're a South Florida medical courier 
-company and we help facilities like ${lead.company} with reliable same-day delivery and 
+OPENING: "Hi, may I speak with ${name}? … Hi ${first},
+this is calling from M.A.M.M.B.A Enterprises LLC. We're a South Florida medical courier
+company and we help facilities like ${company} with reliable same-day delivery and
 scheduled routes. I'll be brief — do you have about 90 seconds?"
 
 DISCOVERY QUESTIONS (ask 1-2 max):
-- "How are deliveries currently handled at ${lead.company}?"
+- "How are deliveries currently handled at ${company}?"
 - "Do you ever have urgent or same-day delivery needs?"
 - "Are there any reliability issues with your current courier?"
 
-IF INTERESTED: "I'd love to send you a quick proposal showing exactly what a dedicated 
-route for ${lead.company} would look like and cost. Can I get your email to send that over?"
+IF INTERESTED: "I'd love to send you a quick proposal showing exactly what a dedicated
+route for ${company} would look like and cost. Can I get your email to send that over?"
 
-IF NOT INTERESTED: "Completely understand. Can I ask — is it that you're fully satisfied 
+IF NOT INTERESTED: "Completely understand. Can I ask — is it that you're fully satisfied
 with your current setup, or just not the right time?" Then politely close.
 
 IF NO ANSWER: Do not leave a voicemail — hang up. The system will send a ringless voicemail separately.

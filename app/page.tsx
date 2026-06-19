@@ -204,15 +204,26 @@ export default function Dashboard() {
 
   // ── Single action trigger ────────────────────────────────────
   const trigger = async (lead: Lead, action: string) => {
-    notify(`Sending ${action.toUpperCase()} to ${lead.name}…`)
-    const res  = await fetch(`/api/agent/${action}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lead_id: lead.id }),
-    })
-    const data = await res.json()
-    if (res.ok) { notify(`${action.toUpperCase()} sent to ${lead.name}`); loadLeads() }
-    else notify(`Error: ${data.error}`, 'err')
+    const displayName = lead.name || lead.company || 'lead'
+    notify(`Sending ${action.toUpperCase()} to ${displayName}…`)
+    try {
+      const res  = await fetch(`/api/agent/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead_id: lead.id }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        notify(`${action.toUpperCase()} sent to ${displayName}`)
+        loadLeads()
+      } else {
+        // Show friendly message for unconfigured APIs
+        const msg = data.error || 'Unknown error'
+        notify(msg.length > 80 ? msg.slice(0, 80) + '…' : msg, 'err')
+      }
+    } catch (err: any) {
+      notify(`Network error: ${err.message}`, 'err')
+    }
   }
 
   // ── Add single lead ──────────────────────────────────────────

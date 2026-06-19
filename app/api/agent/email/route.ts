@@ -13,6 +13,14 @@ function getResend() {
 // ── Generate + Send email ──────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    // ── Guard: Resend configured? ──────────────────────────
+    if (!process.env.RESEND_API_KEY) {
+      return NextResponse.json(
+        { error: 'Resend not configured. Add RESEND_API_KEY to Vercel env vars.' },
+        { status: 400 }
+      )
+    }
+
     const { lead_id, email_number = 1, subject_override, body_override } = await req.json()
 
     const { data: lead, error } = await supabaseAdmin
@@ -90,11 +98,15 @@ async function generateEmailWithClaude(lead: any, emailNumber: number) {
   ]
   const emailType = emailTypes[Math.min(emailNumber - 1, emailTypes.length - 1)]
 
-  const prompt = `Write ${emailType} for ${lead.name}, ${lead.title} at ${lead.company} in ${lead.county} County, Florida.
+  const name    = (lead.name    ?? 'the contact').trim() || 'the contact'
+  const title   = (lead.title   ?? 'decision maker').trim() || 'decision maker'
+  const company = (lead.company ?? 'the organization').trim() || 'the organization'
+  const county  = (lead.county  ?? 'South Florida').trim()   || 'South Florida'
+  const prompt = `Write ${emailType} for ${name}, ${title} at ${company} in ${county} County, Florida.
 
 Company context: M.A.M.M.B.A Enterprises LLC is South Florida's premier medical courier specializing in same-day delivery, scheduled routes, STAT dispatch, and HIPAA-compliant medical specimen transport across Broward, Miami-Dade, and Palm Beach counties.
 
-Their estimated monthly contract value: ${lead.monthly_value}/mo.
+Their estimated monthly contract value: ${lead.monthly_value ?? 'TBD'}/mo.
 
 Requirements:
 - Subject line: compelling, under 8 words, no clickbait
@@ -125,13 +137,13 @@ Respond ONLY with valid JSON in this exact format, no markdown:
   try {
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
     return {
-      subject: parsed.subject || `Courier services for ${lead.company}`,
+      subject: parsed.subject || `Courier services for ${lead.company ?? 'your organization'}`,
       html:    parsed.body_html || `<p>${parsed.body_plain || ''}</p>`,
     }
   } catch {
     return {
-      subject: `Reliable courier routes — ${lead.company}`,
-      html:    `<p>Hi ${lead.name.split(' ')[0]},<br><br>This is M.A.M.M.B.A Enterprises LLC. We help South Florida facilities with same-day courier routes. Would you be open to a 10-minute call?<br><br>Best,<br>[Your Name]<br>M.A.M.M.B.A Enterprises LLC</p>`,
+      subject: `Reliable courier routes — ${lead.company ?? 'your organization'}`,
+      html:    `<p>Hi ${(lead.name ?? 'there').trim().split(' ')[0]},<br><br>This is M.A.M.M.B.A Enterprises LLC. We help South Florida facilities with same-day courier routes. Would you be open to a 10-minute call?<br><br>Best,<br>[Your Name]<br>M.A.M.M.B.A Enterprises LLC</p>`,
     }
   }
 }
