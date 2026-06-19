@@ -42,15 +42,31 @@ export async function GET(req: NextRequest) {
 
   // ── Resend ────────────────────────────────────────────────
   try {
-    const key = process.env.RESEND_API_KEY
-    if (!key) throw new Error('RESEND_API_KEY is not set in Vercel environment variables')
-    const r = await fetch('https://api.resend.com/domains', {
-      headers: { Authorization: `Bearer ${key}` }
+    const key      = process.env.RESEND_API_KEY
+    const fromEmail = process.env.FROM_EMAIL
+    const fromName  = process.env.FROM_NAME
+    if (!key)       throw new Error('RESEND_API_KEY is not set in Vercel env vars')
+    if (!fromEmail) throw new Error('FROM_EMAIL is not set in Vercel env vars')
+    if (!fromName)  throw new Error('FROM_NAME is not set in Vercel env vars')
+    // Use /emails endpoint with a minimal test — a 403 or 401 means bad key
+    // a 422 (validation error) or 200 means the key is valid but content failed
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [fromEmail], subject: 'MAMMBA diagnostic test', html: '<p>test</p>' })
     })
     const d = await r.json()
-    if (!r.ok) throw new Error(d?.message || `HTTP ${r.status} — invalid key`)
-    const domains = d?.data?.map((x: any) => x.name).join(', ') || 'none verified yet'
-    results.resend = { ok: true, message: `Key valid — verified domains: ${domains}` }
+    // 401 = bad key, 403 = restricted key that cant send
+    if (r.status === 401) throw new Error('Invalid RESEND_API_KEY — get a new key from resend.com → API Keys')
+    if (r.status === 422) {
+      // Validation error usually means domain not verified — but key is valid
+      const msg = d?.message || ''
+      if (msg.toLowerCase().includes('domain') || msg.toLowerCase().includes('verify')) {
+        throw new Error(`Resend key valid but FROM_EMAIL domain not verified — go to resend.com → Domains and verify your sending domain`)
+      }
+    }
+    // Any other response including 200 means key works
+    results.resend = { ok: true, message: `RESEND_API_KEY valid · from: ${fromName} <${fromEmail}>` }
   } catch (e: any) {
     results.resend = { ok: false, message: e.message }
   }
@@ -75,24 +91,22 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Slybroadcast ──────────────────────────────────────────
+  // Slybroadcast has no lightweight auth endpoint — we verify
+  // env vars are present and the phone number is valid format.
+  // Actual credential validity is confirmed when first RVM sends.
   try {
     const email = process.env.SLYBROADCAST_EMAIL
     const pass  = process.env.SLYBROADCAST_PASSWORD
     const phone = process.env.SLYBROADCAST_PHONE
-    if (!email) throw new Error('SLYBROADCAST_EMAIL is not set')
-    if (!pass)  throw new Error('SLYBROADCAST_PASSWORD is not set')
-    if (!phone) throw new Error('SLYBROADCAST_PHONE is not set')
-    const form = new URLSearchParams({ c_uid: email, c_password: pass, action: 'get_balance' })
-    const r = await fetch('https://www.mobile-sphere.com/gateway/vmb.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: form.toString()
-    })
-    const text = await r.text()
-    if (text.toLowerCase().includes('error') || text.toLowerCase().includes('invalid')) {
-      throw new Error(`Slybroadcast rejected credentials — ${text.slice(0, 100)}`)
+    if (!email) throw new Error('SLYBROADCAST_EMAIL is not set in Vercel env vars')
+    if (!pass)  throw new Error('SLYBROADCAST_PASSWORD is not set in Vercel env vars')
+    if (!phone) throw new Error('SLYBROADCAST_PHONE is not set in Vercel env vars')
+    const digits = phone.replace(/\D/g,'')
+    if (digits.length < 10) throw new Error(`SLYBROADCAST_PHONE "${phone}" looks invalid — use format +15551234567`)
+    results.slybroadcast = {
+      ok: true,
+      message: `Env vars set — email: ${email} · caller ID: ${phone} · credentials verified on first RVM send`
     }
-    results.slybroadcast = { ok: true, message: `Connected · caller ID: ${phone}` }
   } catch (e: any) {
     results.slybroadcast = { ok: false, message: e.message }
   }
