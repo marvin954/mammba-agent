@@ -46,17 +46,14 @@ export async function POST(req: NextRequest) {
 
     const rvmMessage = buildRVMScript(lead)
 
-    const formData = new URLSearchParams({
-      c_uid:          slyEmail,
-      c_password:     slyPass,
-      c_phone:        phone.replace(/\D/g, ''),
-      c_record_audio: '0',
-      c_audio_file:   'tts',
-      c_tts_message:  rvmMessage,
-      c_date:         'now',
-      c_from_number:  slyPhone.replace(/\D/g, ''),
-    })
-
+   const toDigits = (n: string) => { const d = n.replace(/\D/g, ''); return d.length === 11 && d.startsWith('1') ? d.slice(1) : d }
+const formData = new URLSearchParams({
+  c_uid:          slyEmail,
+  c_password:     slyPass,
+  c_phone:        toDigits(phone),
+  ...
+  c_from_number:  toDigits(slyPhone),
+})
     const slyRes  = await fetch('https://www.mobile-sphere.com/gateway/vmb.php', {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
