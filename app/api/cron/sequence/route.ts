@@ -4,9 +4,15 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
+  const expected = `Bearer ${process.env.CRON_SECRET}`
 
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Debug: log for troubleshooting (remove in production)
+  console.log('Auth header received:', authHeader?.substring(0, 20) + '...' || 'none')
+  console.log('Expected format:', expected?.substring(0, 20) + '...')
+  console.log('CRON_SECRET env var set:', !!process.env.CRON_SECRET)
+
+  if (authHeader !== expected) {
+    return NextResponse.json({ error: 'Unauthorized', debug: { received: authHeader?.substring(0, 30), expected: expected?.substring(0, 30) } }, { status: 401 })
   }
 
   try {
@@ -18,7 +24,6 @@ export async function GET(request: NextRequest) {
       .select('*')
       .in('status', ['New', 'RVM Sent', 'Called', 'Texted', 'Emailed'])
       .eq('sequence_paused', false)
-      .or(`next_followup.is.null,next_followup.lte.${now}`)
       .limit(100)
 
     if (error) {
@@ -34,7 +39,22 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Define sequence steps (1-5 cycle)
+    // Filter to only leads due for follow-up (next_followup is null or in the past)
+    const dueLeads = leads.filter(lead => {
+      if (!lead.next_followup) return true // null = never sent anything, ready to go
+      return new Date(lead.next_followup) <= new Date()
+    })
+
+    if (dueLeads.length === 0) {
+      return NextResponse.json({
+        success: true,
+        ranAt: now,
+        processed: 0,
+        message: 'No leads due for follow-up at this time',
+      })
+    }
+
+    // Define sequence steps (0-4 cycle)
     const sequenceMap: Record<number, string> = {
       0: 'rvm',      // New → RVM
       1: 'call',     // RVM Sent → Call
@@ -48,7 +68,7 @@ export async function GET(request: NextRequest) {
     let failed = 0
 
     // Process each lead
-    for (const lead of leads) {
+    for (const lead of dueLeads) {
       try {
         // Determine next action based on sequence_step (mod 5)
         const stepIndex = (lead.sequence_step || 0) % 5
