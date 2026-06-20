@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       channel:   'email',
       direction: 'outbound',
       summary:   `Email ${email_number} sent to ${lead.name} — "${subject}"`,
-      body:      subject,
+      body:      htmlBody,
       result:    'sent',
     })
 
