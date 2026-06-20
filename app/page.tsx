@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 
 type Lead = {
   id: string; name: string; title: string; company: string
@@ -266,6 +266,154 @@ function MessagePreviewDrawer({ leadId, onClose }: { leadId: string; onClose: ()
   )
 }
 
+
+// ── Edit Lead Modal ────────────────────────────────────────────
+function EditLeadModal({
+  lead, onClose, onSave
+}: {
+  lead: Lead
+  onClose: () => void
+  onSave: (updated: Partial<Lead>) => void
+}) {
+  const [form, setForm] = React.useState({
+    name:          lead.name          || '',
+    title:         lead.title         || '',
+    company:       lead.company       || '',
+    phone:         lead.phone         || '',
+    email:         lead.email         || '',
+    county:        lead.county        || 'Broward',
+    monthly_value: lead.monthly_value || '',
+    priority:      lead.priority      || 'Medium',
+    status:        lead.status        || 'New',
+    notes:         lead.notes         || '',
+  })
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+
+  const inp: React.CSSProperties = {
+    width: '100%', padding: '7px 10px', borderRadius: 6,
+    border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box'
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    await onSave(form)
+    setSaving(false)
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, padding: '1rem'
+    }} onClick={onClose}>
+      <div style={{
+        background: '#fff', borderRadius: 12, width: '100%', maxWidth: 560,
+        maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+      }} onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ background: '#0A1628', padding: '14px 18px',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      borderRadius: '12px 12px 0 0' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#C9A84C' }}>
+            ✏️  Edit Lead
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', color: '#8899BB',
+            fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '2px 6px'
+          }}>✕</button>
+        </div>
+
+        {/* Form */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '18px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {([
+              ['name',          'Full Name'],
+              ['title',         'Job Title'],
+              ['company',       'Company'],
+              ['phone',         'Phone'],
+              ['email',         'Email'],
+              ['monthly_value', 'Est. Monthly Value'],
+            ] as [string, string][]).map(([key, label]) => (
+              <div key={key}>
+                <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>
+                  {label}
+                </label>
+                <input
+                  value={(form as any)[key]}
+                  onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                  style={inp}
+                />
+              </div>
+            ))}
+
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>County</label>
+              <select value={form.county}
+                onChange={e => setForm(p => ({ ...p, county: e.target.value }))} style={inp as any}>
+                {['Broward', 'Miami-Dade', 'Palm Beach'].map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Priority</label>
+              <select value={form.priority}
+                onChange={e => setForm(p => ({ ...p, priority: e.target.value }))} style={inp as any}>
+                {['High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Status</label>
+              <select value={form.status}
+                onChange={e => setForm(p => ({ ...p, status: e.target.value }))} style={inp as any}>
+                {['New','RVM Sent','Called','Texted','Emailed','Engaged',
+                  'Proposal Sent','Negotiating','Closed Won','Closed Lost','On Hold']
+                  .map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Notes</label>
+              <textarea
+                value={form.notes}
+                onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                rows={3}
+                style={{ ...inp, resize: 'vertical' as any }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '12px 18px', borderTop: '1px solid #DDE3F0',
+                      display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{
+            padding: '7px 16px', borderRadius: 8, border: '1px solid #ddd',
+            background: '#F4F6FA', fontSize: 13, cursor: 'pointer', color: '#555'
+          }}>
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving} style={{
+            padding: '7px 20px', borderRadius: 8, border: 'none',
+            background: saving ? '#2A3E6B' : '#0A1628',
+            color: '#C9A84C', fontWeight: 600, fontSize: 13, cursor: 'pointer'
+          }}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ══════════════════════════════════════════════════════════════
 export default function Dashboard() {
   const [leads, setLeads]             = useState<Lead[]>([])
@@ -279,6 +427,8 @@ export default function Dashboard() {
   const [toastType, setToastType]     = useState<'ok'|'err'>('ok')
   const [selectedMsg, setSelectedMsg] = useState<LogEntry | null>(null)
   const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null)
+  const [editLead, setEditLead]           = useState<Lead | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<Lead | null>(null)
 
   const [importRows, setImportRows]   = useState<ImportRow[]>([])
   const [importFile, setImportFile]   = useState('')
@@ -410,6 +560,35 @@ export default function Dashboard() {
     }
   }
 
+  const saveLead = async (updated: Partial<Lead>) => {
+    if (!editLead) return
+    const res = await fetch('/api/leads', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editLead.id, ...updated }),
+    })
+    if (res.ok) {
+      notify('Lead updated')
+      setEditLead(null)
+      loadLeads()
+    } else {
+      const d = await res.json()
+      notify(d.error || 'Save failed', 'err')
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return
+    const res = await fetch(`/api/leads?id=${deleteConfirm.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      notify(`${deleteConfirm.name || deleteConfirm.company} removed`)
+      setDeleteConfirm(null)
+      loadLeads()
+    } else {
+      notify('Delete failed', 'err')
+    }
+  }
+
   const kpis = {
     total:   leads.length,
     engaged: leads.filter(l => ['Engaged','Proposal Sent'].includes(l.status)).length,
@@ -432,6 +611,47 @@ export default function Dashboard() {
 
       {/* Message Detail Modal */}
       {selectedMsg && <MessageModal entry={selectedMsg} onClose={() => setSelectedMsg(null)} />}
+
+      {/* Edit Lead Modal */}
+      {editLead && (
+        <EditLeadModal
+          lead={editLead}
+          onClose={() => setEditLead(null)}
+          onSave={saveLead}
+        />
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: '1rem'
+        }} onClick={() => setDeleteConfirm(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: '1.5rem',
+            maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#1A2540', marginBottom: 8 }}>
+              Remove this lead?
+            </div>
+            <div style={{ fontSize: 13, color: '#6B7A99', marginBottom: '1.25rem', lineHeight: 1.6 }}>
+              <strong>{deleteConfirm.name || deleteConfirm.company}</strong> at <strong>{deleteConfirm.company}</strong> will be permanently removed from your pipeline along with all activity history.
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setDeleteConfirm(null)} style={{
+                padding: '7px 16px', borderRadius: 8, border: '1px solid #ddd',
+                background: '#F4F6FA', fontSize: 13, cursor: 'pointer'
+              }}>Cancel</button>
+              <button onClick={confirmDelete} style={{
+                padding: '7px 16px', borderRadius: 8, border: 'none',
+                background: '#A32D2D', color: '#fff', fontSize: 13,
+                fontWeight: 600, cursor: 'pointer'
+              }}>Remove lead</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Message History Drawer */}
       {drawerLeadId && (
@@ -532,7 +752,7 @@ export default function Dashboard() {
               {leads.map((lead, i) => (
                 <div key={lead.id}
                   style={{ padding:'12px 16px', borderTop: i > 0 ? '1px solid #f0f0f0' : 'none' }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 100px auto', gap:10, alignItems:'center' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 90px', gap:10, alignItems:'start' }}>
                     <div>
                       <div style={{ fontWeight:500 }}>{lead.name || '—'}</div>
                       <div style={{ fontSize:12, color:'#666' }}>{lead.company} · {lead.county}</div>
@@ -559,29 +779,45 @@ export default function Dashboard() {
                         <div style={{ color:'#BA7517', fontSize:11 }}>Paused</div>
                       )}
                     </div>
-                    <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
-                      {[['rvm','📳'],['call','📞'],['sms','💬'],['email','✉️']]
-                        .map(([action, icon]) => (
-                        <button key={action} onClick={() => trigger(lead, action)}
-                          title={action.toUpperCase()}
-                          style={btn({ fontSize:16, padding:'4px 8px', lineHeight:1 })}>
-                          {icon}
-                        </button>
-                      ))}
-                      {/* View messages button */}
-                      <button
-                        onClick={() => setDrawerLeadId(lead.id)}
-                        title="View all messages sent to this lead"
-                        style={btn({
-                          fontSize:11, padding:'4px 10px',
-                          background: drawerLeadId===lead.id ? '#0A1628' : '#F4F6FA',
-                          color:      drawerLeadId===lead.id ? '#C9A84C' : '#555',
-                          borderColor: '#ddd'
-                        })}>
-                        History
-                      </button>
-                    </div>
                   </div>
+                </div>
+                {/* Action buttons — full width row below */}
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center',
+                              paddingTop:8, borderTop:'1px solid #f5f5f5', marginTop:4 }}>
+                  {[['rvm','📳 RVM'],['call','📞 Call'],['sms','💬 SMS'],['email','✉️ Email']]
+                    .map(([action, label]) => (
+                    <button key={action} onClick={() => trigger(lead, action)}
+                      title={action.toUpperCase()}
+                      style={btn({ fontSize:12, padding:'5px 10px' })}>
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setDrawerLeadId(lead.id)}
+                    title="View message history"
+                    style={btn({
+                      fontSize:12, padding:'5px 10px',
+                      background: drawerLeadId===lead.id ? '#0A1628' : '#F4F6FA',
+                      color:      drawerLeadId===lead.id ? '#C9A84C' : '#555',
+                    })}>
+                    📋 History
+                  </button>
+                  <button
+                    onClick={() => setEditLead(lead)}
+                    title="Edit this lead"
+                    style={btn({ fontSize:12, padding:'5px 10px',
+                                 background:'#E6F1FB', color:'#185FA5',
+                                 borderColor:'#B3D1F5' })}>
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(lead)}
+                    title="Remove this lead"
+                    style={btn({ fontSize:12, padding:'5px 10px',
+                                 background:'#FDECEA', color:'#A32D2D',
+                                 borderColor:'#F5C6C6' })}>
+                    🗑 Remove
+                  </button>
                 </div>
               ))}
             </div>
