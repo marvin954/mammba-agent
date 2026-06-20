@@ -67,7 +67,7 @@ const formData = new URLSearchParams({
       direction: 'outbound',
       summary:   `Ringless voicemail sent to ${safe(lead.name, 'lead')} at ${safe(lead.company)}`,
       body:      rvmMessage,
-      result:    slyText.includes('ok') ? 'delivered' : 'failed',
+      result: slyText.toLowerCase().includes('ok') ? 'delivered' : `failed: ${slyText.slice(0, 120)}`,
     })
 
     await supabaseAdmin.from('leads').update({
