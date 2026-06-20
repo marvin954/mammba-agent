@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
       channel:   'call',
       direction: 'outbound',
       summary:   `AI call initiated to ${lead.name ?? 'lead'} at ${lead.company ?? ''}`,
+      body:    callScript,
       result:    'initiated',
     })
 
