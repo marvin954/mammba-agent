@@ -780,7 +780,6 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
-                </div>
                 {/* Action buttons — full width row below */}
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center',
                               paddingTop:8, borderTop:'1px solid #f5f5f5', marginTop:4 }}>
@@ -819,6 +818,7 @@ export default function Dashboard() {
                     🗑 Remove
                   </button>
                 </div>
+                  </div>
               ))}
             </div>
           )}
