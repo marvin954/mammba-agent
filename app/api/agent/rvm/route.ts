@@ -62,4 +62,32 @@ export async function POST(req: NextRequest) {
     const rvmOk   = slyText.toLowerCase().includes('ok') || slyText.toLowerCase().includes('success')
 
     await supabaseAdmin.from('activity_log').insert({
-      lead_id:
+      lead_id:   lead.id,
+      channel:   'rvm',
+      direction: 'outbound',
+      summary:   `Ringless voicemail sent to ${safe(lead.name, 'lead')} at ${safe(lead.company)}`,
+      body:      rvmMessage,
+      result:    rvmOk ? 'delivered' : `failed: ${slyText.slice(0, 120)}`,
+    })
+
+    await supabaseAdmin.from('leads').update({
+      status:       'RVM Sent',
+      touches:      (lead.touches || 0) + 1,
+      last_contact: new Date().toISOString(),
+    }).eq('id', lead.id)
+
+    return NextResponse.json({ success: true, response: slyText })
+
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
+function buildRVMScript(lead: any): string {
+  const first   = firstName(lead.name)
+  const name    = safe(lead.name,    'there')
+  const company = safe(lead.company, 'your organization')
+  const county  = safe(lead.county,  'South Florida')
+  const phone   = safe(process.env.SLYBROADCAST_PHONE, '[YOUR PHONE]')
+  return `Hi, this message is for ${name}. This is calling from M.A.M.M.B.A Enterprises LLC. We specialize in medical courier and same-day delivery routes for businesses across ${county} County — specifically for facilities like ${company}. I'd love to show you how we can eliminate your delivery headaches with a dedicated, reliable route — GPS tracked, backup driver included, and no setup fees. Please call us back at ${phone} — I'll keep it under 10 minutes and have a proposal ready. Again, this is M.A.M.M.B.A Enterprises LLC. Looking forward to speaking with you, ${first}. Have a great day.`
+}
