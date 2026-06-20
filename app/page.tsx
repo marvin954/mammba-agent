@@ -77,6 +77,150 @@ Maria Santos,Operations Manager,Broward Health Medical Center,954-355-4400,msant
 James Ortega,Supply Chain Director,Memorial Regional Hospital,954-987-2000,jortega@example.com,Broward,Tier 1,"$4,000-$8,000",High,
 Carlos Rivera,Director of Logistics,Jackson Memorial Hospital,305-585-1111,crivera@example.com,Miami-Dade,Tier 1,"$6,000-$10,000",High,3 campuses`
 
+// ── Edit Lead Modal ────────────────────────────────────────────
+function EditLeadModal({ lead, onClose, onSave }: { lead: Lead; onClose: () => void; onSave: () => void }) {
+  const [form, setForm] = useState(lead)
+  const [loading, setLoading] = useState(false)
+
+  const handleSave = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: form.id, ...form }),
+      })
+      if (res.ok) {
+        onSave()
+        onClose()
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const inp: React.CSSProperties = {
+    width:'100%', padding:'8px 10px', borderRadius:6,
+    border:'1px solid #ddd', fontSize:13, boxSizing:'border-box'
+  }
+  const btn = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+    padding:'8px 14px', borderRadius:8, border:'1px solid #ddd',
+    background:'#fff', fontSize:13, cursor:'pointer', ...extra
+  })
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, padding: '1rem'
+    }} onClick={onClose}>
+      <div style={{
+        background: '#fff', borderRadius: 12, width: '100%', maxWidth: 500,
+        overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+      }} onClick={e => e.stopPropagation()}>
+
+        {/* Modal header */}
+        <div style={{
+          background: '#0A1628', padding: '14px 18px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#C9A84C' }}>Edit lead</div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', color: '#8899BB',
+            fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '2px 6px'
+          }}>✕</button>
+        </div>
+
+        {/* Form */}
+        <div style={{ padding: '18px', maxHeight: '70vh', overflow: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Name *</label>
+              <input value={form.name} onChange={e => setForm(p => ({...p, name: e.target.value}))} style={inp} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Title</label>
+              <input value={form.title} onChange={e => setForm(p => ({...p, title: e.target.value}))} style={inp} />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Company *</label>
+            <input value={form.company} onChange={e => setForm(p => ({...p, company: e.target.value}))} style={inp} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Phone</label>
+              <input value={form.phone} onChange={e => setForm(p => ({...p, phone: e.target.value}))} style={inp} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Email</label>
+              <input value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} style={inp} />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>County</label>
+              <select value={form.county} onChange={e => setForm(p => ({...p, county: e.target.value}))} style={inp as any}>
+                {['Broward','Miami-Dade','Palm Beach'].map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Status</label>
+              <select value={form.status} onChange={e => setForm(p => ({...p, status: e.target.value}))} style={inp as any}>
+                {['New','RVM Sent','Called','Texted','Emailed','Engaged','Proposal Sent','Closed Won','Closed Lost','On Hold']
+                  .map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Priority</label>
+              <select value={form.priority} onChange={e => setForm(p => ({...p, priority: e.target.value}))} style={inp as any}>
+                {['High','Medium','Low'].map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Monthly value</label>
+              <input value={form.monthly_value} onChange={e => setForm(p => ({...p, monthly_value: e.target.value}))} style={inp} />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Notes</label>
+            <textarea value={form.notes} onChange={e => setForm(p => ({...p, notes: e.target.value}))} 
+              style={{...inp, minHeight: 80, fontFamily: 'system-ui, sans-serif'} as any} />
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div style={{
+          padding: '12px 18px', borderTop: '1px solid #DDE3F0',
+          display: 'flex', gap: 8, justifyContent: 'flex-end'
+        }}>
+          <button onClick={onClose} style={btn()}>Cancel</button>
+          <button onClick={handleSave} disabled={loading} style={btn({
+            background: '#0A1628', color: '#C9A84C', borderColor: '#0A1628', fontWeight: 500
+          })}>
+            {loading ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Message Preview Modal ──────────────────────────────────────
 function MessageModal({ entry, onClose }: { entry: LogEntry; onClose: () => void }) {
   useEffect(() => {
@@ -279,6 +423,7 @@ export default function Dashboard() {
   const [toastType, setToastType]     = useState<'ok'|'err'>('ok')
   const [selectedMsg, setSelectedMsg] = useState<LogEntry | null>(null)
   const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null)
+  const [editingLead, setEditingLead] = useState<Lead | null>(null)
 
   const [importRows, setImportRows]   = useState<ImportRow[]>([])
   const [importFile, setImportFile]   = useState('')
@@ -317,6 +462,19 @@ export default function Dashboard() {
     })
     all.sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     setLog(all.slice(0, 60))
+  }
+
+  const deleteLead = async (id: string, name: string) => {
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return
+    try {
+      const res = await fetch(`/api/leads?id=${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        notify(`Lead deleted: ${name}`)
+        loadLeads()
+      }
+    } catch (err: any) {
+      notify(`Failed to delete: ${err.message}`, 'err')
+    }
   }
 
   useEffect(() => { loadLeads() }, [loadLeads])
@@ -438,6 +596,15 @@ export default function Dashboard() {
         <MessagePreviewDrawer
           leadId={drawerLeadId}
           onClose={() => setDrawerLeadId(null)}
+        />
+      )}
+
+      {/* Edit Lead Modal */}
+      {editingLead && (
+        <EditLeadModal
+          lead={editingLead}
+          onClose={() => setEditingLead(null)}
+          onSave={loadLeads}
         />
       )}
 
@@ -579,6 +746,30 @@ export default function Dashboard() {
                           borderColor: '#ddd'
                         })}>
                         History
+                      </button>
+                      {/* Edit button */}
+                      <button
+                        onClick={() => setEditingLead(lead)}
+                        title="Edit this lead"
+                        style={btn({
+                          fontSize:11, padding:'4px 10px',
+                          background: '#F4F6FA',
+                          color:      '#0C447C',
+                          borderColor: '#B3D1F5'
+                        })}>
+                        Edit
+                      </button>
+                      {/* Delete button */}
+                      <button
+                        onClick={() => deleteLead(lead.id, lead.name || lead.company)}
+                        title="Delete this lead"
+                        style={btn({
+                          fontSize:11, padding:'4px 10px',
+                          background: '#FDECEA',
+                          color:      '#A32D2D',
+                          borderColor: '#F5C6C6'
+                        })}>
+                        Delete
                       </button>
                     </div>
                   </div>
