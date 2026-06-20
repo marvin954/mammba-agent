@@ -24,6 +24,15 @@ function safe(val: string | null | undefined, fallback = ''): string {
   return val?.trim() || fallback
 }
 
+// ── Format phone to E.164: +15551234567 ─────────────────────────
+function formatPhoneE164(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 10) return `+1${digits}`
+  if (digits.length === 11 && digits[0] === '1') return `+${digits}`
+  if (digits.length === 11) return `+1${digits.slice(1)}`
+  return `+${digits}` // assume international if not 10 or 11 digits
+}
+
 export async function POST(req: NextRequest) {
   try {
     // ── Guard: Twilio configured? ──────────────────────────
@@ -58,11 +67,12 @@ export async function POST(req: NextRequest) {
 
     const client  = getTwilio()
     const baseUrl = appUrl()
+    const e164Phone = formatPhoneE164(phone)
 
     const msgParams: any = {
       body: smsBody,
       from: process.env.TWILIO_PHONE_NUMBER!,
-      to:   phone,
+      to:   e164Phone,
     }
 
     // Only set statusCallback if we have a valid app URL

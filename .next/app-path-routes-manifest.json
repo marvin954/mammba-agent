@@ -1,0 +1,14 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/agent/rvm/route": "/api/agent/rvm",
+  "/api/agent/sms/route": "/api/agent/sms",
+  "/api/agent/email/route": "/api/agent/email",
+  "/api/leads/route": "/api/leads",
+  "/api/leads/import/route": "/api/leads/import",
+  "/api/diagnostics/route": "/api/diagnostics",
+  "/api/agent/call/route": "/api/agent/call",
+  "/api/webhooks/bland/route": "/api/webhooks/bland",
+  "/api/cron/sequence/route": "/api/cron/sequence",
+  "/page": "/",
+  "/diagnostics/page": "/diagnostics"
+}
