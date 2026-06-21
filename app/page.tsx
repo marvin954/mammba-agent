@@ -456,7 +456,11 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ voice_id: voiceId }),
       })
-      if (!res.ok) { notify('Preview failed', 'err'); return }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        notify(data.error || 'Preview failed', 'err')
+        return
+      }
       const blob = await res.blob()
       const url  = URL.createObjectURL(blob)
       const audio = new Audio(url)

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 
-const PREVIEW_TEXT = "Hi, this is calling from M.A.M.M.B.A Enterprises LLC — South Florida's premier medical courier. I'd love to connect and tell you more about our same-day delivery routes."
+const PREVIEW_TEXT = "Hi, this is calling from M.A.M.M.B.A Enterprises LLC — South Florida's premier same-day medical courier. I'd love to show you how we can handle your delivery routes."
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,25 +11,34 @@ export async function POST(req: NextRequest) {
     const key = process.env.BLAND_API_KEY
     if (!key) return NextResponse.json({ error: 'BLAND_API_KEY not set' }, { status: 400 })
 
+    // Bland TTS API — built-in voices use 'voice' field, not 'voice_id'
     const res = await fetch('https://api.bland.ai/v1/speak', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'authorization': key,
+        'Content-Type':  'application/json',
+        'authorization': `Bearer ${key}`,
       },
       body: JSON.stringify({
-        text:       PREVIEW_TEXT,
-        voice_id:   voice_id,
-        stream:     false,
+        text:  PREVIEW_TEXT,
+        voice: voice_id,
       }),
     })
 
-    if (!res.ok) {
-      const err = await res.text()
-      return NextResponse.json({ error: `Bland TTS error: ${err.slice(0, 200)}` }, { status: 500 })
+    // Always read body — Bland returns JSON on error, WAV on success
+    const contentType = res.headers.get('content-type') || ''
+
+    if (!res.ok || contentType.includes('application/json')) {
+      const errText = await res.text()
+      let errMsg = errText.slice(0, 300)
+      try { errMsg = JSON.parse(errText)?.message || errMsg } catch {}
+      return NextResponse.json({ error: `Bland error (${res.status}): ${errMsg}` }, { status: 500 })
     }
 
     const audioBuffer = await res.arrayBuffer()
+
+    if (audioBuffer.byteLength < 100) {
+      return NextResponse.json({ error: 'Bland returned empty audio — voice may not support TTS' }, { status: 500 })
+    }
 
     return new NextResponse(audioBuffer, {
       status: 200,
