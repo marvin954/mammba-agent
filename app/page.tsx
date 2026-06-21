@@ -432,7 +432,8 @@ export default function Dashboard() {
 
   const [blandVoice, setBlandVoice]       = useState('maya')
   const [savingSettings, setSavingSettings] = useState(false)
-  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
+  const [testCallPhone, setTestCallPhone] = useState('')
+  const [testCalling, setTestCalling]     = useState(false)
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(s => {
@@ -447,29 +448,22 @@ export default function Dashboard() {
     notify('Settings saved')
   }
 
-  const previewVoice = async (voiceId: string) => {
-    if (previewingVoice) return
-    setPreviewingVoice(voiceId)
+  const sendTestCall = async () => {
+    if (!testCallPhone) { notify('Enter your phone number first', 'err'); return }
+    setTestCalling(true)
     try {
       const res = await fetch('/api/voice-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voice_id: voiceId }),
+        body: JSON.stringify({ voice: blandVoice, phone: testCallPhone }),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-        notify(data.error || 'Preview failed', 'err')
-        return
-      }
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      audio.play()
-      audio.onended = () => URL.revokeObjectURL(url)
-    } catch (err: any) {
-      notify(`Preview error: ${err.message}`, 'err')
+      const data = await res.json()
+      if (!res.ok) { notify(data.error || 'Test call failed', 'err'); return }
+      notify('Test call placed -- pick up your phone to hear the ' + blandVoice + ' voice')
+    } catch (err) {
+      notify('Error: ' + (err as any).message, 'err')
     } finally {
-      setPreviewingVoice(null)
+      setTestCalling(false)
     }
   }
 
@@ -1067,21 +1061,22 @@ export default function Dashboard() {
                   onClick={() => setBlandVoice(v.id)}>
                   <div style={{ fontWeight:600, fontSize:14, color:blandVoice===v.id?'#C9A84C':'#1A2540' }}>{v.label}</div>
                   <div style={{ fontSize:12, color:blandVoice===v.id?'#8899BB':'#6B7A99', marginTop:2, marginBottom:8 }}>{v.desc}</div>
-                  <button
-                    onClick={e => { e.stopPropagation(); previewVoice(v.id) }}
-                    disabled={previewingVoice !== null}
-                    style={{
-                      fontSize:11, padding:'4px 10px', borderRadius:6,
-                      cursor: previewingVoice ? 'wait' : 'pointer',
-                      border: `1px solid ${blandVoice===v.id?'#C9A84C':'#CBD3E8'}`,
-                      background: blandVoice===v.id?'rgba(201,168,76,0.15)':'#fff',
-                      color: blandVoice===v.id?'#C9A84C':'#555',
-                    }}>
-                    {previewingVoice===v.id ? '⏳ Loading…' : '▶ Preview'}
-                  </button>
                   {blandVoice===v.id && <div style={{ fontSize:11, color:'#C9A84C', marginTop:6 }}>✓ Selected</div>}
                 </div>
               ))}
+            </div>
+          </div>
+          <div style={{ background:'#F4F6FA', border:'1px solid #DDE3F0', borderRadius:10, padding:'1rem 1.25rem', marginBottom:'1rem' }}>
+            <div style={{ fontWeight:500, marginBottom:4 }}>Hear it on your phone</div>
+            <div style={{ fontSize:13, color:'#666', marginBottom:10 }}>Enter your number and we will call you using the selected voice so you can hear exactly how it sounds on a real call.</div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <input value={testCallPhone} onChange={e => setTestCallPhone(e.target.value)}
+                placeholder="+1 954 555 0000"
+                style={{ flex:1, minWidth:180, padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13 }} />
+              <button onClick={sendTestCall} disabled={testCalling}
+                style={btn({ background:'#1A2540', color:'#fff', borderColor:'#1A2540', fontWeight:500 })}>
+                {testCalling ? 'Calling...' : 'Test call'}
+              </button>
             </div>
           </div>
           <button onClick={saveSettings} disabled={savingSettings}
