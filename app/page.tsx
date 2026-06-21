@@ -754,7 +754,7 @@ export default function Dashboard() {
 
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:'1rem', flexWrap:'wrap' }}>
-        {[['leads','Pipeline'],['upload','Upload Leads'],['add','Add One'],['log','Activity Log'],['settings','⚙️ Settings']]
+        {[['leads','Pipeline'],['upload','Upload Leads'],['add','Add One'],['log','Activity Log'],['agents','Agents'],['settings','⚙️ Settings']]
           .map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)}
             style={btn({ background: tab===t ? '#E6F1FB' : '#fff',
@@ -1047,6 +1047,48 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab==='agents' && (
+        <div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem' }}>
+            <div>
+              <div style={{ fontWeight:600, fontSize:16 }}>AI Agents</div>
+              <div style={{ fontSize:13, color:'#666', marginTop:2 }}>Select the active agent for outbound calls, RVMs, SMS and emails.</div>
+            </div>
+            <button onClick={() => setTab('settings')} style={{ padding:'7px 16px', borderRadius:8, border:'1px solid #DDE3F0', background:'#F4F6FA', fontSize:13, cursor:'pointer' }}>+ Add agent</button>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))', gap:16 }}>
+            <div style={{ border:'2px solid #0A1628', borderRadius:12, padding:'1.25rem', background:'#fff', position:'relative' }}>
+              <div style={{ position:'absolute', top:14, right:14, background:'#EAF3DE', color:'#3B6D11', fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:20 }}>Active</div>
+              <div style={{ width:52, height:52, borderRadius:'50%', background:'#0A1628', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:12 }}>
+                <span style={{ fontSize:22, fontWeight:700, color:'#C9A84C' }}>{agentName.charAt(0).toUpperCase()}</span>
+              </div>
+              <div style={{ fontSize:18, fontWeight:700, color:'#1A2540', marginBottom:2 }}>{agentName}</div>
+              <div style={{ fontSize:13, color:'#6B7A99', marginBottom:12 }}>{agentRole} &middot; {companyName}</div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
+                <span style={{ background:'#EEEDFE', color:'#4B3FA0', fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 }}>Voice: {blandVoice}</span>
+                <span style={{ background:'#FAEEDA', color:'#7A4F0D', fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 }}>{agentTone.split(',')[0]}</span>
+                <span style={{ background:'#E1F5EE', color:'#1A6B44', fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 }}>English</span>
+              </div>
+              <div style={{ background:'#F4F6FA', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#555', lineHeight:1.7, marginBottom:14 }}>
+                "Hi, this is <strong>{agentName}</strong>, {agentRole} at {companyName}..."
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={() => setTab('settings')} style={{ flex:1, padding:'8px', borderRadius:8, border:'1px solid #DDE3F0', background:'#F4F6FA', fontSize:13, cursor:'pointer', color:'#1A2540' }}>Edit persona</button>
+                <button onClick={() => setTab('settings')} style={{ flex:1, padding:'8px', borderRadius:8, border:'none', background:'#0A1628', color:'#C9A84C', fontSize:13, fontWeight:500, cursor:'pointer' }}>Test call</button>
+              </div>
+            </div>
+            <div onClick={() => setTab('settings')}
+              style={{ border:'2px dashed #DDE3F0', borderRadius:12, padding:'1.25rem', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:260, cursor:'pointer', color:'#A0AECC', gap:8 }}
+              onMouseEnter={e => (e.currentTarget.style.background='#F4F6FA')}
+              onMouseLeave={e => (e.currentTarget.style.background='transparent')}>
+              <div style={{ fontSize:36 }}>+</div>
+              <div style={{ fontSize:14, fontWeight:500 }}>Add agent</div>
+              <div style={{ fontSize:12, textAlign:'center', maxWidth:180 }}>Create a new persona with a different name, voice and style</div>
+            </div>
+          </div>
         </div>
       )}
 
