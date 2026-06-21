@@ -433,7 +433,7 @@ export default function Dashboard() {
   const [blandVoice, setBlandVoice]       = useState('derek')
   const [agentName, setAgentName]         = useState('Marcus')
   const [agentRole, setAgentRole]         = useState('Logistics Coordinator')
-  const [companyName, setCompanyName]     = useState('MAMMBA Enterprises')
+  const [companyName, setCompanyName]     = useState('Mamba Enterprises')
   const [agentTone, setAgentTone]         = useState('confident and direct, with warmth')
   const [savingSettings, setSavingSettings] = useState(false)
   const [testCallPhone, setTestCallPhone] = useState('')
@@ -1138,7 +1138,7 @@ export default function Dashboard() {
               <div>
                 <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Company name</label>
                 <input value={companyName} onChange={e => setCompanyName(e.target.value)}
-                  placeholder="MAMMBA Enterprises"
+                  placeholder="Mamba Enterprises"
                   style={{ width:'100%', padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13, boxSizing:'border-box' as any }} />
               </div>
               <div>
