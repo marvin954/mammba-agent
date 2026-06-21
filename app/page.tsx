@@ -430,8 +430,9 @@ export default function Dashboard() {
   const [editLead, setEditLead]           = useState<Lead | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Lead | null>(null)
 
-  const [blandVoice, setBlandVoice]   = useState('maya')
+  const [blandVoice, setBlandVoice]       = useState('maya')
   const [savingSettings, setSavingSettings] = useState(false)
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(s => {
@@ -444,6 +445,28 @@ export default function Dashboard() {
     await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bland_voice: blandVoice }) })
     setSavingSettings(false)
     notify('Settings saved')
+  }
+
+  const previewVoice = async (voiceId: string) => {
+    if (previewingVoice) return
+    setPreviewingVoice(voiceId)
+    try {
+      const res = await fetch('/api/voice-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voice_id: voiceId }),
+      })
+      if (!res.ok) { notify('Preview failed', 'err'); return }
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audio.play()
+      audio.onended = () => URL.revokeObjectURL(url)
+    } catch (err: any) {
+      notify(`Preview error: ${err.message}`, 'err')
+    } finally {
+      setPreviewingVoice(null)
+    }
   }
 
   const [importRows, setImportRows]   = useState<ImportRow[]>([])
@@ -1035,10 +1058,23 @@ export default function Dashboard() {
                 { id:'jessica', label:'Jessica', desc:'Female · Warm' },
                 { id:'josh',    label:'Josh',    desc:'Male · Energetic' },
               ].map(v => (
-                <div key={v.id} onClick={() => setBlandVoice(v.id)}
-                  style={{ border:`2px solid ${blandVoice===v.id?'#0A1628':'#DDE3F0'}`, borderRadius:10, padding:'12px 14px', cursor:'pointer', background:blandVoice===v.id?'#0A1628':'#FAFBFF' }}>
+                <div key={v.id}
+                  style={{ border:`2px solid ${blandVoice===v.id?'#0A1628':'#DDE3F0'}`, borderRadius:10, padding:'12px 14px', cursor:'pointer', background:blandVoice===v.id?'#0A1628':'#FAFBFF' }}
+                  onClick={() => setBlandVoice(v.id)}>
                   <div style={{ fontWeight:600, fontSize:14, color:blandVoice===v.id?'#C9A84C':'#1A2540' }}>{v.label}</div>
-                  <div style={{ fontSize:12, color:blandVoice===v.id?'#8899BB':'#6B7A99', marginTop:2 }}>{v.desc}</div>
+                  <div style={{ fontSize:12, color:blandVoice===v.id?'#8899BB':'#6B7A99', marginTop:2, marginBottom:8 }}>{v.desc}</div>
+                  <button
+                    onClick={e => { e.stopPropagation(); previewVoice(v.id) }}
+                    disabled={previewingVoice !== null}
+                    style={{
+                      fontSize:11, padding:'4px 10px', borderRadius:6,
+                      cursor: previewingVoice ? 'wait' : 'pointer',
+                      border: `1px solid ${blandVoice===v.id?'#C9A84C':'#CBD3E8'}`,
+                      background: blandVoice===v.id?'rgba(201,168,76,0.15)':'#fff',
+                      color: blandVoice===v.id?'#C9A84C':'#555',
+                    }}>
+                    {previewingVoice===v.id ? '⏳ Loading…' : '▶ Preview'}
+                  </button>
                   {blandVoice===v.id && <div style={{ fontSize:11, color:'#C9A84C', marginTop:6 }}>✓ Selected</div>}
                 </div>
               ))}
