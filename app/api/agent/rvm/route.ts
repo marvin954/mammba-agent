@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const persona = {
       name:    s.agent_name   || 'Marcus',
       role:    s.agent_role   || 'Logistics Coordinator',
-      company: s.company_name || 'M.A.M.M.B.A Enterprises',
+      company: s.company_name || 'MAMMBA Enterprises',
     }
 
     const rvmMessage = buildRVMScript(lead, persona)
