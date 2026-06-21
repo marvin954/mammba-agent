@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     for (const r of rows || []) s[r.key] = r.value
     const persona = {
       name:    s.agent_name   || 'Marcus',
-      company: s.company_name || 'M.A.M.M.B.A Enterprises',
+      company: s.company_name || 'MAMMBA Enterprises',
     }
 
     const smsBody = body_override || buildSMSBody(lead, persona)
