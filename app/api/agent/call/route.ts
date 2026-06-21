@@ -35,6 +35,11 @@ export async function POST(req: NextRequest) {
 
     const callScript = script_override || buildCallScript(lead)
 
+    // ── Read voice from settings table ─────────────────────
+    const { data: voiceSetting } = await supabaseAdmin
+      .from('settings').select('value').eq('key', 'bland_voice').single()
+    const voice = voiceSetting?.value || 'maya'
+
     // ── App URL for webhook ────────────────────────────────
     const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? ''
     const webhookUrl = appUrl ? `${appUrl}/api/webhooks/bland` : undefined
@@ -48,7 +53,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         phone_number: lead.phone,
         task: callScript,
-        voice: 'maya',
+        voice,
         reduce_latency: true,
         max_duration: 10,
         record: true,
@@ -79,7 +84,7 @@ export async function POST(req: NextRequest) {
       channel:   'call',
       direction: 'outbound',
       summary:   `AI call initiated to ${lead.name ?? 'lead'} at ${lead.company ?? ''}`,
-      body:    callScript,
+      body:      callScript,
       result:    'initiated',
     })
 

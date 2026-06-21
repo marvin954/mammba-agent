@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['twilio'],
+  experimental: {
+    serverComponentsExternalPackages: ['twilio'],
+  },
 }
 export default nextConfig

@@ -430,6 +430,22 @@ export default function Dashboard() {
   const [editLead, setEditLead]           = useState<Lead | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Lead | null>(null)
 
+  const [blandVoice, setBlandVoice]   = useState('maya')
+  const [savingSettings, setSavingSettings] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings').then(r => r.json()).then(s => {
+      if (s.bland_voice) setBlandVoice(s.bland_voice)
+    }).catch(() => {})
+  }, [])
+
+  const saveSettings = async () => {
+    setSavingSettings(true)
+    await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bland_voice: blandVoice }) })
+    setSavingSettings(false)
+    notify('Settings saved')
+  }
+
   const [importRows, setImportRows]   = useState<ImportRow[]>([])
   const [importFile, setImportFile]   = useState('')
   const [importLoading, setImpLoad]   = useState(false)
@@ -709,7 +725,7 @@ export default function Dashboard() {
 
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:'1rem', flexWrap:'wrap' }}>
-        {[['leads','Pipeline'],['upload','Upload Leads'],['add','Add One'],['log','Activity Log']]
+        {[['leads','Pipeline'],['upload','Upload Leads'],['add','Add One'],['log','Activity Log'],['settings','⚙️ Settings']]
           .map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)}
             style={btn({ background: tab===t ? '#E6F1FB' : '#fff',
@@ -780,9 +796,9 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
-                {/* Action buttons — full width row below */}
-                <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center',
-                              paddingTop:8, borderTop:'1px solid #f5f5f5', marginTop:4 }}>
+                  {/* Action buttons — full width row below */}
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center',
+                                paddingTop:8, borderTop:'1px solid #f5f5f5', marginTop:4 }}>
                   {[['rvm','📳 RVM'],['call','📞 Call'],['sms','💬 SMS'],['email','✉️ Email']]
                     .map(([action, label]) => (
                     <button key={action} onClick={() => trigger(lead, action)}
@@ -818,7 +834,7 @@ export default function Dashboard() {
                     🗑 Remove
                   </button>
                 </div>
-                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -1002,6 +1018,36 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab==='settings' && (
+        <div style={{ background:'#fff', border:'1px solid #eee', borderRadius:10, padding:'1.25rem' }}>
+          <h3 style={{ margin:'0 0 1.25rem', fontWeight:500, fontSize:16 }}>Agent Settings</h3>
+          <div style={{ marginBottom:'1.5rem' }}>
+            <div style={{ fontWeight:500, marginBottom:4 }}>Bland.ai Call Voice</div>
+            <div style={{ fontSize:13, color:'#666', marginBottom:12 }}>The voice your AI agent uses on outbound calls.</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:10 }}>
+              {[
+                { id:'maya',    label:'Maya',    desc:'Female · Professional' },
+                { id:'derek',   label:'Derek',   desc:'Male · Confident' },
+                { id:'ryan',    label:'Ryan',    desc:'Male · Conversational' },
+                { id:'jessica', label:'Jessica', desc:'Female · Warm' },
+                { id:'josh',    label:'Josh',    desc:'Male · Energetic' },
+              ].map(v => (
+                <div key={v.id} onClick={() => setBlandVoice(v.id)}
+                  style={{ border:`2px solid ${blandVoice===v.id?'#0A1628':'#DDE3F0'}`, borderRadius:10, padding:'12px 14px', cursor:'pointer', background:blandVoice===v.id?'#0A1628':'#FAFBFF' }}>
+                  <div style={{ fontWeight:600, fontSize:14, color:blandVoice===v.id?'#C9A84C':'#1A2540' }}>{v.label}</div>
+                  <div style={{ fontSize:12, color:blandVoice===v.id?'#8899BB':'#6B7A99', marginTop:2 }}>{v.desc}</div>
+                  {blandVoice===v.id && <div style={{ fontSize:11, color:'#C9A84C', marginTop:6 }}>✓ Selected</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <button onClick={saveSettings} disabled={savingSettings}
+            style={btn({ background:'#0A1628', color:'#C9A84C', borderColor:'#0A1628', fontWeight:500 })}>
+            {savingSettings ? 'Saving…' : 'Save settings'}
+          </button>
         </div>
       )}
     </div>

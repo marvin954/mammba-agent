@@ -13,34 +13,41 @@ function firstName(name: string | null | undefined): string {
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Guard: Slybroadcast configured? ───────────────────
     const slyEmail = process.env.SLYBROADCAST_EMAIL
     const slyPass  = process.env.SLYBROADCAST_PASSWORD
     const slyPhone = process.env.SLYBROADCAST_PHONE
     if (!slyEmail || !slyPass || !slyPhone) {
       return NextResponse.json(
-        { error: 'Slybroadcast not configured.' },
+        { error: 'Slybroadcast not configured. Add SLYBROADCAST_EMAIL, SLYBROADCAST_PASSWORD, and SLYBROADCAST_PHONE to Vercel env vars.' },
         { status: 400 }
       )
     }
 
     const { lead_id } = await req.json()
-    const { data: lead, error } = await supabaseAdmin.from('leads').select('*').eq('id', lead_id).single()
-    if (error || !lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+
+    const { data: lead, error } = await supabaseAdmin
+      .from('leads')
+      .select('*')
+      .eq('id', lead_id)
+      .single()
+
+    if (error || !lead) {
+      return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+    }
 
     const phone = safe(lead.phone)
     if (!phone || phone === 'N/A') {
       return NextResponse.json(
-        { error: `No phone number on file for ${safe(lead.name, 'this lead')}.` },
+        { error: `No phone number on file for ${safe(lead.name, 'this lead')}. Add a phone number first.` },
         { status: 400 }
       )
     }
 
     const rvmMessage = buildRVMScript(lead)
 
-    const toDigits = (n: string) => {
-      const d = n.replace(/\D/g, '')
-      return d.length === 11 && d.startsWith('1') ? d.slice(1) : d
-    }
+    // Slybroadcast requires 10-digit US numbers (no country code)
+    const toDigits   = (n: string) => { const d = n.replace(/\D/g, ''); return d.length === 11 && d.startsWith('1') ? d.slice(1) : d }
 
     const formData = new URLSearchParams({
       c_uid:          slyEmail,
@@ -59,7 +66,8 @@ export async function POST(req: NextRequest) {
       body:    formData.toString(),
     })
     const slyText = await slyRes.text()
-    const rvmOk   = slyText.toLowerCase().includes('ok') || slyText.toLowerCase().includes('success')
+
+    const rvmOk = slyText.toLowerCase().includes('ok') || slyText.toLowerCase().includes('success')
 
     await supabaseAdmin.from('activity_log').insert({
       lead_id:   lead.id,
