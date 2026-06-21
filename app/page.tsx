@@ -88,7 +88,7 @@ function EditLeadModal({ lead, onClose, onSave }: { lead: Lead; onClose: () => v
       const res = await fetch('/api/leads', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: form.id, ...form }),
+        body: JSON.stringify(form),
       })
       if (res.ok) {
         onSave()
