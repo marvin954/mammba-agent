@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const persona = {
       name:    s.agent_name    || 'Marcus',
       role:    s.agent_role    || 'Logistics Coordinator',
-      company: s.company_name  || 'MAMMBA Enterprises',
+      company: s.company_name  || 'Mamba Enterprises',
       tone:    s.agent_tone    || 'confident and direct, with warmth',
       voice:   s.bland_voice   || 'derek',
     }
