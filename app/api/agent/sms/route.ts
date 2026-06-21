@@ -4,141 +4,79 @@ import twilio from 'twilio'
 import { supabaseAdmin } from '@/lib/supabase'
 
 function getTwilio() {
-  const sid   = process.env.TWILIO_ACCOUNT_SID
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sid || !token) throw new Error('Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars')
+  const sid = process.env.TWILIO_ACCOUNT_SID; const token = process.env.TWILIO_AUTH_TOKEN
+  if (!sid || !token) throw new Error('Missing Twilio env vars')
   return twilio(sid, token)
 }
-
-// ── Safe app URL — never returns "undefined/..." ───────────────
-function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
-}
-
-function firstName(name: string | null | undefined): string {
-  if (!name || name.trim() === '') return 'there'
-  return name.trim().split(' ')[0]
-}
-
-function safe(val: string | null | undefined, fallback = ''): string {
-  return val?.trim() || fallback
-}
+function appUrl(): string { return (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '') }
+function firstName(name: string | null | undefined): string { if (!name || name.trim() === '') return 'there'; return name.trim().split(' ')[0] }
+function safe(val: string | null | undefined, fallback = ''): string { return val?.trim() || fallback }
 
 export async function POST(req: NextRequest) {
   try {
-    // ── Guard: Twilio configured? ──────────────────────────
     if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-      return NextResponse.json(
-        { error: 'Twilio not configured. Add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN to Vercel env vars.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Twilio not configured.' }, { status: 400 })
     }
-
     const { lead_id, body_override } = await req.json()
-
-    const { data: lead, error } = await supabaseAdmin
-      .from('leads')
-      .select('*')
-      .eq('id', lead_id)
-      .single()
-
-    if (error || !lead) {
-      return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
-    }
-
+    const { data: lead, error } = await supabaseAdmin.from('leads').select('*').eq('id', lead_id).single()
+    if (error || !lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
     const phone = safe(lead.phone)
-    if (!phone || phone === 'N/A') {
-      return NextResponse.json(
-        { error: `No phone number on file for ${safe(lead.name, 'this lead')}. Add a phone number first.` },
-        { status: 400 }
-      )
+    if (!phone || phone === 'N/A') return NextResponse.json({ error: `No phone number on file for ${safe(lead.name, 'this lead')}.` }, { status: 400 })
+
+    // ── Load persona ───────────────────────────────────────
+    const { data: rows } = await supabaseAdmin.from('settings').select('key, value')
+    const s: Record<string, string> = {}
+    for (const r of rows || []) s[r.key] = r.value
+    const persona = {
+      name:    s.agent_name   || 'Marcus',
+      company: s.company_name || 'M.A.M.M.B.A Enterprises',
     }
 
-    const smsBody = body_override || buildSMSBody(lead)
-
+    const smsBody = body_override || buildSMSBody(lead, persona)
     const client  = getTwilio()
     const baseUrl = appUrl()
-
-    const msgParams: any = {
-      body: smsBody,
-      from: process.env.TWILIO_PHONE_NUMBER!,
-      to:   phone,
-    }
-
-    // Only set statusCallback if we have a valid app URL
-    if (baseUrl) {
-      msgParams.statusCallback = `${baseUrl}/api/webhooks/twilio`
-    }
+    const msgParams: any = { body: smsBody, from: process.env.TWILIO_PHONE_NUMBER!, to: phone }
+    if (baseUrl) msgParams.statusCallback = `${baseUrl}/api/webhooks/twilio`
 
     const message = await client.messages.create(msgParams)
 
     await supabaseAdmin.from('activity_log').insert({
-      lead_id:   lead.id,
-      channel:   'sms',
-      direction: 'outbound',
-      summary:   `SMS sent to ${safe(lead.name, 'lead')} at ${safe(lead.company)}`,
-      body:      smsBody,
-      result:    message.status,
+      lead_id: lead.id, channel: 'sms', direction: 'outbound',
+      summary: `SMS sent to ${safe(lead.name, 'lead')} at ${safe(lead.company)}`,
+      body: smsBody, result: message.status,
     })
-
     await supabaseAdmin.from('leads').update({
-      status:        'Texted',
-      touches:       (lead.touches || 0) + 1,
-      last_contact:  new Date().toISOString(),
+      status: 'Texted', touches: (lead.touches || 0) + 1,
+      last_contact: new Date().toISOString(),
       next_followup: new Date(Date.now() + 2 * 86400000).toISOString(),
     }).eq('id', lead.id)
 
     return NextResponse.json({ success: true, sid: message.sid })
-
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
-  }
+  } catch (err: any) { return NextResponse.json({ error: err.message }, { status: 500 }) }
 }
 
-// Inbound SMS replies from Twilio webhook
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const from = searchParams.get('From')
-  const body = searchParams.get('Body')
-
-  if (!from || !body) {
-    return NextResponse.json({ error: 'Missing params' }, { status: 400 })
-  }
-
+  const from = searchParams.get('From'); const body = searchParams.get('Body')
+  if (!from || !body) return NextResponse.json({ error: 'Missing params' }, { status: 400 })
   const normalised = from.replace(/\D/g, '').slice(-10)
-  const { data: leads } = await supabaseAdmin
-    .from('leads')
-    .select('*')
-    .ilike('phone', `%${normalised}%`)
-    .limit(1)
-
+  const { data: leads } = await supabaseAdmin.from('leads').select('*').ilike('phone', `%${normalised}%`).limit(1)
   if (leads && leads.length > 0) {
     const lead = leads[0]
     await supabaseAdmin.from('activity_log').insert({
-      lead_id:   lead.id,
-      channel:   'sms',
-      direction: 'inbound',
-      summary:   `Reply received from ${safe(lead.name, 'lead')}: "${body.slice(0, 100)}"`,
-      body,
-      result:    'received',
+      lead_id: lead.id, channel: 'sms', direction: 'inbound',
+      summary: `Reply received from ${safe(lead.name, 'lead')}: "${body.slice(0, 100)}"`,
+      body, result: 'received',
     })
-    await supabaseAdmin.from('leads').update({
-      status:          'Engaged',
-      last_contact:    new Date().toISOString(),
-      sequence_paused: true,
-    }).eq('id', lead.id)
+    await supabaseAdmin.from('leads').update({ status: 'Engaged', last_contact: new Date().toISOString(), sequence_paused: true }).eq('id', lead.id)
   }
-
-  return new Response(
-    `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`,
-    { headers: { 'Content-Type': 'text/xml' } }
-  )
+  return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`, { headers: { 'Content-Type': 'text/xml' } })
 }
 
-function buildSMSBody(lead: any): string {
+function buildSMSBody(lead: any, p: { name: string; company: string }): string {
   const first   = firstName(lead.name)
-  const county  = safe(lead.county, 'South Florida')
+  const county  = safe(lead.county,  'South Florida')
   const company = safe(lead.company, 'your organization')
-  const phone   = safe(process.env.SLYBROADCAST_PHONE, '[YOUR PHONE]')
-  return `Hi ${first}, this is M.A.M.M.B.A Enterprises LLC. We help ${county} facilities like ${company} with same-day medical courier routes — GPS tracked, backup driver included. Worth a 10-min call? Reply YES or call ${phone}. Reply STOP to opt out.`
+  const phone   = safe(process.env.SLYBROADCAST_PHONE, '')
+  return `Hi ${first}, this is ${p.name} from ${p.company}. We help ${county} facilities like ${company} with same-day medical courier routes — GPS tracked, backup driver included. Worth a 10-min call? Reply YES or call ${phone}. Reply STOP to opt out.`
 }

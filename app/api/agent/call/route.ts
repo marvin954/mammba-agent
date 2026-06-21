@@ -6,142 +6,103 @@ export async function POST(req: NextRequest) {
   try {
     const { lead_id, script_override } = await req.json()
 
-    // ── Guard: API key configured? ─────────────────────────
     const blandKey = process.env.BLAND_API_KEY
     if (!blandKey || blandKey.trim() === '') {
-      return NextResponse.json(
-        { error: 'Bland.ai API key not configured. Add BLAND_API_KEY to your Vercel environment variables.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Bland.ai API key not configured.' }, { status: 400 })
     }
 
-    const { data: lead, error } = await supabaseAdmin
-      .from('leads')
-      .select('*')
-      .eq('id', lead_id)
-      .single()
+    const { data: lead, error } = await supabaseAdmin.from('leads').select('*').eq('id', lead_id).single()
+    if (error || !lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
 
-    if (error || !lead) {
-      return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
-    }
-
-    // ── Guard: phone number present? ───────────────────────
     if (!lead.phone || lead.phone === 'N/A' || lead.phone.trim() === '') {
-      return NextResponse.json(
-        { error: `No phone number on file for ${lead.name ?? 'this lead'}. Add a phone number in the CRM first.` },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: `No phone number on file for ${lead.name ?? 'this lead'}.` }, { status: 400 })
     }
 
-    const callScript = script_override || buildCallScript(lead)
+    // ── Load persona from settings ─────────────────────────
+    const { data: rows } = await supabaseAdmin.from('settings').select('key, value')
+    const s: Record<string, string> = {}
+    for (const r of rows || []) s[r.key] = r.value
+    const persona = {
+      name:    s.agent_name    || 'Marcus',
+      role:    s.agent_role    || 'Logistics Coordinator',
+      company: s.company_name  || 'M.A.M.M.B.A Enterprises',
+      tone:    s.agent_tone    || 'confident and direct, with warmth',
+      voice:   s.bland_voice   || 'derek',
+    }
 
-    // ── Read voice from settings table ─────────────────────
-    const { data: voiceSetting } = await supabaseAdmin
-      .from('settings').select('value').eq('key', 'bland_voice').single()
-    const voice = voiceSetting?.value || 'maya'
-
-    // ── App URL for webhook ────────────────────────────────
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? ''
+    const callScript = script_override || buildCallScript(lead, persona)
+    const appUrl     = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? ''
     const webhookUrl = appUrl ? `${appUrl}/api/webhooks/bland` : undefined
 
     const blandRes = await fetch('https://api.bland.ai/v1/calls', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'authorization': blandKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'authorization': blandKey },
       body: JSON.stringify({
         phone_number: lead.phone,
-        task: callScript,
-        voice,
+        task:         callScript,
+        voice:        persona.voice,
         reduce_latency: true,
-        max_duration: 10,
-        record: true,
+        max_duration:   10,
+        record:         true,
         metadata: { lead_id: lead.id, company: lead.company ?? '' },
         ...(webhookUrl ? { webhook: webhookUrl } : {}),
-        analysis_prompt: `Did the prospect agree to a meeting or request a proposal? Summarize the outcome in 1-2 sentences.`,
+        analysis_prompt: 'Did the prospect agree to a meeting or request a proposal? Summarize in 1-2 sentences.',
         analysis_schema: {
-          agreed_to_meeting:   'boolean',
-          requested_proposal:  'boolean',
-          callback_requested:  'boolean',
-          outcome_summary:     'string',
-          objection_raised:    'string',
-        }
-      })
+          agreed_to_meeting: 'boolean', requested_proposal: 'boolean',
+          callback_requested: 'boolean', outcome_summary: 'string', objection_raised: 'string',
+        },
+      }),
     })
 
     const blandData = await blandRes.json()
-
-    if (!blandRes.ok) {
-      return NextResponse.json(
-        { error: `Bland.ai error: ${blandData?.message ?? blandData?.error ?? JSON.stringify(blandData)}` },
-        { status: 500 }
-      )
-    }
+    if (!blandRes.ok) return NextResponse.json({ error: `Bland.ai error: ${blandData?.message ?? blandData?.error ?? JSON.stringify(blandData)}` }, { status: 500 })
 
     await supabaseAdmin.from('activity_log').insert({
-      lead_id:   lead.id,
-      channel:   'call',
-      direction: 'outbound',
-      summary:   `AI call initiated to ${lead.name ?? 'lead'} at ${lead.company ?? ''}`,
-      body:      callScript,
-      result:    'initiated',
+      lead_id: lead.id, channel: 'call', direction: 'outbound',
+      summary: `AI call initiated to ${lead.name ?? 'lead'} at ${lead.company ?? ''} — voice: ${persona.voice}`,
+      body:    callScript, result: 'initiated',
     })
-
     await supabaseAdmin.from('leads').update({
-      status:       'Called',
-      touches:      (lead.touches || 0) + 1,
-      last_contact: new Date().toISOString(),
+      status: 'Called', touches: (lead.touches || 0) + 1, last_contact: new Date().toISOString(),
     }).eq('id', lead.id)
 
     return NextResponse.json({ success: true, call_id: blandData.call_id })
-
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
 
-// ── Safe helpers ───────────────────────────────────────────────
 function firstName(name: string | null | undefined): string {
   if (!name || name.trim() === '') return 'there'
   return name.trim().split(' ')[0]
 }
-
 function safe(val: string | null | undefined, fallback = ''): string {
   return val?.trim() || fallback
 }
 
-function buildCallScript(lead: any): string {
-  const name    = safe(lead.name,    'the contact')
-  const title   = safe(lead.title,   'team member')
-  const company = safe(lead.company, 'your organization')
-  const county  = safe(lead.county,  'South Florida')
-  const first   = firstName(lead.name)
+function buildCallScript(lead: any, p: { name: string; role: string; company: string; tone: string }): string {
+  const leadName    = safe(lead.name,    'the contact')
+  const leadTitle   = safe(lead.title,   'team member')
+  const leadCompany = safe(lead.company, 'your organization')
+  const county      = safe(lead.county,  'South Florida')
+  const first       = firstName(lead.name)
 
-  return `You are a professional sales representative for Mamba Enterprises LLC,
-South Florida's premier medical courier and logistics company. You are calling ${name},
-who is the ${title} at ${company} in ${county} County.
+  return `You are ${p.name}, a ${p.role} at ${p.company} — South Florida's premier same-day medical courier. Your tone is ${p.tone}. You are calling ${leadName}, ${leadTitle} at ${leadCompany} in ${county} County.
 
-Your goal is to have a brief, respectful conversation to explore whether Mamba can
-help them with same-day delivery, scheduled courier routes, or medical specimen transport.
+Your goal: have a brief, respectful conversation to explore whether ${p.company} can help with same-day delivery, scheduled courier routes, or medical specimen transport.
 
-OPENING: "Hi, may I speak with ${name}? … Hi ${first},
-this is calling from Mamba Enterprises LLC. We're a South Florida medical courier
-company and we help facilities like ${company} with reliable same-day delivery and
-scheduled routes. I'll be brief — do you have about 90 seconds?"
+OPENING: "Hi, may I speak with ${leadName}? ... Hi ${first}, this is ${p.name} calling from ${p.company}. We're a South Florida medical courier and we help facilities like ${leadCompany} with reliable same-day delivery and scheduled routes. I'll be brief — do you have about 90 seconds?"
 
-DISCOVERY QUESTIONS (ask 1-2 max):
-- "How are deliveries currently handled at ${company}?"
+DISCOVERY (ask 1-2 max):
+- "How are deliveries currently handled at ${leadCompany}?"
 - "Do you ever have urgent or same-day delivery needs?"
-- "Are there any reliability issues with your current courier?"
+- "Any reliability issues with your current courier?"
 
-IF INTERESTED: "I'd love to send you a quick proposal showing exactly what a dedicated
-route for ${company} would look like and cost. Can I get your email to send that over?"
+IF INTERESTED: "I'd love to send you a quick proposal showing exactly what a dedicated route for ${leadCompany} would look like. Can I get your email?"
 
-IF NOT INTERESTED: "Completely understand. Can I ask — is it that you're fully satisfied
-with your current setup, or just not the right time?" Then politely close.
+IF NOT INTERESTED: "Completely understand — is it that you're fully satisfied, or just not the right time?" Then close politely.
 
-IF NO ANSWER: Do not leave a voicemail — hang up. The system will send a ringless voicemail separately.
+IF VOICEMAIL: Hang up. The system will send a ringless voicemail separately.
 
-Always be professional, never pushy. Keep the call under 5 minutes.`
+Be professional, never pushy. Keep it under 5 minutes.`
 }

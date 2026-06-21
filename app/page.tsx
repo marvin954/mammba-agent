@@ -430,20 +430,28 @@ export default function Dashboard() {
   const [editLead, setEditLead]           = useState<Lead | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Lead | null>(null)
 
-  const [blandVoice, setBlandVoice]       = useState('maya')
+  const [blandVoice, setBlandVoice]       = useState('derek')
+  const [agentName, setAgentName]         = useState('Marcus')
+  const [agentRole, setAgentRole]         = useState('Logistics Coordinator')
+  const [companyName, setCompanyName]     = useState('M.A.M.M.B.A Enterprises')
+  const [agentTone, setAgentTone]         = useState('confident and direct, with warmth')
   const [savingSettings, setSavingSettings] = useState(false)
   const [testCallPhone, setTestCallPhone] = useState('')
   const [testCalling, setTestCalling]     = useState(false)
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(s => {
-      if (s.bland_voice) setBlandVoice(s.bland_voice)
+      if (s.bland_voice)   setBlandVoice(s.bland_voice)
+      if (s.agent_name)    setAgentName(s.agent_name)
+      if (s.agent_role)    setAgentRole(s.agent_role)
+      if (s.company_name)  setCompanyName(s.company_name)
+      if (s.agent_tone)    setAgentTone(s.agent_tone)
     }).catch(() => {})
   }, [])
 
   const saveSettings = async () => {
     setSavingSettings(true)
-    await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bland_voice: blandVoice }) })
+    await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bland_voice: blandVoice, agent_name: agentName, agent_role: agentRole, company_name: companyName, agent_tone: agentTone }) })
     setSavingSettings(false)
     notify('Settings saved')
   }
@@ -1045,6 +1053,43 @@ export default function Dashboard() {
       {tab==='settings' && (
         <div style={{ background:'#fff', border:'1px solid #eee', borderRadius:10, padding:'1.25rem' }}>
           <h3 style={{ margin:'0 0 1.25rem', fontWeight:500, fontSize:16 }}>Agent Settings</h3>
+          {/* Persona */}
+          <div style={{ marginBottom:'1.5rem' }}>
+            <div style={{ fontWeight:500, fontSize:15, marginBottom:12, paddingBottom:8, borderBottom:'1px solid #EEF0F5' }}>Agent Persona</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+              <div>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Agent name</label>
+                <input value={agentName} onChange={e => setAgentName(e.target.value)}
+                  placeholder="Marcus"
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13, boxSizing:'border-box' as any }} />
+              </div>
+              <div>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Role</label>
+                <input value={agentRole} onChange={e => setAgentRole(e.target.value)}
+                  placeholder="Logistics Coordinator"
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13, boxSizing:'border-box' as any }} />
+              </div>
+              <div>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Company name</label>
+                <input value={companyName} onChange={e => setCompanyName(e.target.value)}
+                  placeholder="M.A.M.M.B.A Enterprises"
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13, boxSizing:'border-box' as any }} />
+              </div>
+              <div>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Tone</label>
+                <select value={agentTone} onChange={e => setAgentTone(e.target.value)}
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13, boxSizing:'border-box' as any }}>
+                  {['confident and direct, with warmth','professional and formal','friendly and conversational','energetic and enthusiastic','calm and reassuring'].map(t => (
+                    <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div style={{ background:'#F4F6FA', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#555', lineHeight:1.7 }}>
+              <strong style={{ color:'#1A2540' }}>Preview:</strong> "Hi, this is <strong>{agentName}</strong>, {agentRole} at <strong>{companyName}</strong>. We help South Florida facilities with same-day courier routes..."
+            </div>
+          </div>
+
           <div style={{ marginBottom:'1.5rem' }}>
             <div style={{ fontWeight:500, marginBottom:4 }}>Bland.ai Call Voice</div>
             <div style={{ fontSize:13, color:'#666', marginBottom:12 }}>The voice your AI agent uses on outbound calls.</div>
