@@ -99,3 +99,6 @@ create policy "service_role_leads"    on leads        for all using (true);
 create policy "service_role_activity" on activity_log for all using (true);
 create policy "service_role_campaigns"on campaigns    for all using (true);
 create policy "service_role_settings" on settings     for all using (true);
+
+-- Add preferred_language to leads (run this if upgrading an existing install)
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS preferred_language text DEFAULT 'auto';
