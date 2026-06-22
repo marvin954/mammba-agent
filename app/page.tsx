@@ -848,3 +848,389 @@ export default function Dashboard() {
                       )}
                       {lead.preferred_language==='spanish' && <div style={{ color:'#8B1A6B', fontSize:11, marginTop:2 }}>Sofia · ES</div>}
                       {lead.preferred_language==='english' && <div style={{ color:'#185FA5', fontSize:11, marginTop:2 }}>Marcus · EN</div>}
+                    </div>
+                  </div>
+                  {/* Action buttons — full width row below */}
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center',
+                                paddingTop:8, borderTop:'1px solid #f5f5f5', marginTop:4 }}>
+                  {[['rvm','📳 RVM'],['call','📞 Call'],['sms','💬 SMS'],['email','✉️ Email']]
+                    .map(([action, label]) => (
+                    <button key={action} onClick={() => trigger(lead, action)}
+                      title={action.toUpperCase()}
+                      style={btn({ fontSize:12, padding:'5px 10px' })}>
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setDrawerLeadId(lead.id)}
+                    title="View message history"
+                    style={btn({
+                      fontSize:12, padding:'5px 10px',
+                      background: drawerLeadId===lead.id ? '#0A1628' : '#F4F6FA',
+                      color:      drawerLeadId===lead.id ? '#C9A84C' : '#555',
+                    })}>
+                    📋 History
+                  </button>
+                  <button
+                    onClick={() => setEditLead(lead)}
+                    title="Edit this lead"
+                    style={btn({ fontSize:12, padding:'5px 10px',
+                                 background:'#E6F1FB', color:'#185FA5',
+                                 borderColor:'#B3D1F5' })}>
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(lead)}
+                    title="Remove this lead"
+                    style={btn({ fontSize:12, padding:'5px 10px',
+                                 background:'#FDECEA', color:'#A32D2D',
+                                 borderColor:'#F5C6C6' })}>
+                    🗑 Remove
+                  </button>
+                </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── UPLOAD TAB ── */}
+      {tab === 'upload' && (
+        <div>
+          <div style={{ background:'#F4F6FA', border:'1px solid #DDE3F0',
+                        borderRadius:10, padding:'1rem 1.25rem', marginBottom:'1rem' }}>
+            <div style={{ display:'flex', justifyContent:'space-between',
+                          alignItems:'center', flexWrap:'wrap', gap:8 }}>
+              <div>
+                <div style={{ fontWeight:500, marginBottom:4 }}>Upload leads via CSV or JSON</div>
+                <div style={{ fontSize:13, color:'#666' }}>
+                  Required: <code>name</code>, <code>company</code> — everything else optional.
+                </div>
+              </div>
+              <button onClick={downloadTemplate}
+                style={btn({ background:'#0A1628', color:'#C9A84C', borderColor:'#0A1628', fontWeight:500 })}>
+                Download template CSV
+              </button>
+            </div>
+          </div>
+
+          <div
+            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileRef.current?.click()}
+            style={{ border:`2px dashed ${dragOver ? '#0C447C' : '#CBD3E8'}`,
+                     borderRadius:10, padding:'2.5rem', textAlign:'center', cursor:'pointer',
+                     background: dragOver ? '#EAF1FD' : '#FAFBFF', marginBottom:'1rem' }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>📂</div>
+            <div style={{ fontWeight:500, marginBottom:4 }}>
+              {importFile ? `📄 ${importFile}` : 'Drop your CSV or JSON file here'}
+            </div>
+            <div style={{ fontSize:13, color:'#888' }}>or click to browse</div>
+            <input ref={fileRef} type="file" accept=".csv,.json,.txt"
+              onChange={handleFileInput} style={{ display:'none' }} />
+          </div>
+
+          {importRows.length > 0 && (
+            <div style={{ background:'#fff', border:'1px solid #eee', borderRadius:10, marginBottom:'1rem', overflow:'auto' }}>
+              <div style={{ padding:'12px 16px', borderBottom:'1px solid #f0f0f0',
+                            display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+                <div>
+                  <span style={{ fontWeight:500 }}>Preview — {importRows.length} rows</span>
+                  <span style={{ marginLeft:10, fontSize:12, color:'#3B6D11' }}>
+                    ✓ {importRows.filter(r=>r._valid).length} valid
+                  </span>
+                  {importRows.some(r=>!r._valid) && (
+                    <span style={{ marginLeft:8, fontSize:12, color:'#A32D2D' }}>
+                      ✗ {importRows.filter(r=>!r._valid).length} invalid
+                    </span>
+                  )}
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={() => { setImportRows([]); setImportFile('') }} style={btn({ color:'#A32D2D' })}>Clear</button>
+                  <button onClick={handleImport} disabled={importLoading}
+                    style={btn({ background:'#0A1628', color:'#C9A84C', borderColor:'#0A1628', fontWeight:500 })}>
+                    {importLoading ? 'Importing…' : `Import ${importRows.filter(r=>r._valid).length} leads`}
+                  </button>
+                </div>
+              </div>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:'#F4F6FA' }}>
+                    {['','Name','Company','Title','Phone','Email','County','Priority'].map(h => (
+                      <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontWeight:500, color:'#555', borderBottom:'1px solid #eee' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.slice(0,50).map((row,i) => (
+                    <tr key={i} style={{ background: row._valid ? '#fff' : '#FFF5F5' }}>
+                      <td style={{ padding:'7px 10px', borderBottom:'1px solid #f5f5f5' }}>
+                        {row._valid ? <span style={{ color:'#3B6D11' }}>✓</span> : <span style={{ color:'#A32D2D' }}>✗</span>}
+                      </td>
+                      {[row.name,row.company,row.title||'—',row.phone||'—',row.email||'—',row.county||'Broward',row.priority||'Medium'].map((val,j) => (
+                        <td key={j} style={{ padding:'7px 10px', borderBottom:'1px solid #f5f5f5', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color: row._valid ? '#222' : '#A32D2D' }}>{val}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {importResult && (
+            <div style={{ background:'#EAF3DE', border:'1px solid #B8DFAD', borderRadius:10, padding:'1rem 1.25rem' }}>
+              <div style={{ fontWeight:500, color:'#3B6D11', fontSize:15 }}>✓ Import complete</div>
+              <div style={{ fontSize:13, color:'#555', marginTop:4 }}>
+                <strong>{importResult.inserted}</strong> leads imported.
+                {importResult.skipped > 0 && <> <strong>{importResult.skipped}</strong> skipped.</>}
+              </div>
+              <button onClick={() => setTab('leads')} style={btn({ marginTop:10, background:'#3B6D11', color:'#fff', borderColor:'#3B6D11' })}>
+                View leads →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── ADD SINGLE LEAD TAB ── */}
+      {tab === 'add' && (
+        <div style={{ background:'#fff', border:'1px solid #eee', borderRadius:10, padding:'1.25rem' }}>
+          <h3 style={{ margin:'0 0 1rem', fontWeight:500, fontSize:16 }}>Add a single lead</h3>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:12 }}>
+            {([['name','Full name *'],['title','Job title'],['company','Company *'],
+               ['phone','Phone'],['email','Email'],['monthly_value','Est. monthly value'],
+               ['notes','Notes']] as [string,string][]).map(([key, label]) => (
+              <div key={key} style={{ gridColumn: key==='notes' ? '1 / -1' : 'auto' }}>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>{label}</label>
+                <input value={(newLead as any)[key]}
+                  onChange={e => setNewLead(p => ({...p, [key]: e.target.value}))} style={inp} />
+              </div>
+            ))}
+            <div>
+              <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>County</label>
+              <select value={newLead.county} onChange={e => setNewLead(p => ({...p, county: e.target.value}))} style={inp as any}>
+                {['Broward','Miami-Dade','Palm Beach'].map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Priority</label>
+              <select value={newLead.priority} onChange={e => setNewLead(p => ({...p, priority: e.target.value}))} style={inp as any}>
+                {['High','Medium','Low'].map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+          <button onClick={addLead} style={btn({ marginTop:'1rem', background:'#0A1628', color:'#C9A84C', borderColor:'#0A1628', fontWeight:500 })}>
+            Add lead + start sequence
+          </button>
+        </div>
+      )}
+
+      {/* ── ACTIVITY LOG TAB ── */}
+      {tab === 'log' && (
+        <div style={{ background:'#fff', border:'1px solid #eee', borderRadius:10 }}>
+          <div style={{ padding:'12px 16px', borderBottom:'1px solid #f0f0f0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span style={{ fontWeight:500, fontSize:14 }}>Activity Log</span>
+            <span style={{ fontSize:12, color:'#888' }}>{log.length} events — click any to read full message</span>
+          </div>
+          {log.length === 0 && (
+            <p style={{ padding:'2rem', color:'#888', textAlign:'center' }}>No activity yet.</p>
+          )}
+          {log.map((entry, i) => (
+            <div key={entry.id}
+              style={{
+                display:'flex', gap:12, padding:'10px 16px', alignItems:'flex-start',
+                borderTop: i > 0 ? '1px solid #f0f0f0' : 'none',
+                cursor: 'pointer', transition: 'background .1s'
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F4F6FA')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => setSelectedMsg(entry)}
+            >
+              <div style={{ width:32, height:32, borderRadius:'50%',
+                             background: CH_COLOR[entry.channel]||'#F4F6FA',
+                             display:'flex', alignItems:'center',
+                             justifyContent:'center', fontSize:14, flexShrink:0 }}>
+                {CH_ICON[entry.channel]||'📋'}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13 }}>{entry.summary}</div>
+                {entry.body && (
+                  <div style={{ fontSize:12, color:'#6B7A99', marginTop:2,
+                                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {entry.body.replace(/<[^>]+>/g,'').slice(0,80)}
+                    {entry.body.length > 80 ? '…' : ''}
+                  </div>
+                )}
+                <div style={{ fontSize:11, color:'#A0AECC', marginTop:2 }}>
+                  {new Date(entry.created_at).toLocaleString()} · {entry.result||''}
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:'#C9A84C', flexShrink:0, paddingTop:2 }}>
+                View →
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab==='agents' && (
+        <div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem' }}>
+            <div>
+              <div style={{ fontWeight:600, fontSize:16 }}>AI Agents</div>
+              <div style={{ fontSize:13, color:'#666', marginTop:2 }}>Select the active agent for outbound calls, RVMs, SMS and emails.</div>
+            </div>
+            <button onClick={() => setTab('settings')} style={{ padding:'7px 16px', borderRadius:8, border:'1px solid #DDE3F0', background:'#F4F6FA', fontSize:13, cursor:'pointer' }}>+ Add agent</button>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))', gap:16 }}>
+            {/* Marcus card */}
+            <div style={{ border:`2px solid ${activeAgent==='marcus'?'#0A1628':'#DDE3F0'}`, borderRadius:12, padding:'1.25rem', background:'#fff', position:'relative' }}>
+              {activeAgent==='marcus' ? (
+                <div style={{ position:'absolute', top:14, right:14, background:'#EAF3DE', color:'#3B6D11', fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:20 }}>Active</div>
+              ) : (
+                <button onClick={() => activateAgent('marcus')}
+                  style={{ position:'absolute', top:12, right:12, fontSize:11, padding:'3px 12px', borderRadius:20, border:'1px solid #DDE3F0', background:'#F4F6FA', cursor:'pointer', color:'#555', fontWeight:500 }}>
+                  Set active
+                </button>
+              )}
+              <div style={{ width:52, height:52, borderRadius:'50%', background:'#0A1628', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:12 }}>
+                <span style={{ fontSize:22, fontWeight:700, color:'#C9A84C' }}>{agentName.charAt(0).toUpperCase()}</span>
+              </div>
+              <div style={{ fontSize:18, fontWeight:700, color:'#1A2540', marginBottom:2 }}>{agentName}</div>
+              <div style={{ fontSize:13, color:'#6B7A99', marginBottom:12 }}>{agentRole} &middot; {companyName}</div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
+                <span style={{ background:'#EEEDFE', color:'#4B3FA0', fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 }}>Voice: {blandVoice}</span>
+                <span style={{ background:'#FAEEDA', color:'#7A4F0D', fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 }}>{agentTone.split(',')[0]}</span>
+                <span style={{ background:'#E1F5EE', color:'#1A6B44', fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 }}>English</span>
+              </div>
+              <div style={{ background:'#F4F6FA', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#555', lineHeight:1.7, marginBottom:14 }}>
+                "Hi, this is <strong>{agentName}</strong>, {agentRole} at {companyName}..."
+              </div>
+              {/* Voice picker — Marcus's voice, no one else's */}
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:12, color:'#6B7A99', fontWeight:500, marginBottom:8 }}>Voice</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:6 }}>
+                  {[
+                    { id:'maya',    label:'Maya',    desc:'Female' },
+                    { id:'derek',   label:'Derek',   desc:'Male' },
+                    { id:'ryan',    label:'Ryan',    desc:'Male' },
+                    { id:'jessica', label:'Jessica', desc:'Female' },
+                    { id:'josh',    label:'Josh',    desc:'Male' },
+                  ].map(v => (
+                    <div key={v.id} onClick={() => setBlandVoice(v.id)}
+                      style={{ border:`2px solid ${blandVoice===v.id?'#C9A84C':'#DDE3F0'}`, borderRadius:8, padding:'8px 6px', cursor:'pointer', textAlign:'center',
+                               background:blandVoice===v.id?'rgba(201,168,76,0.12)':'rgba(255,255,255,0.05)' }}>
+                      <div style={{ fontSize:11, fontWeight:600, color:blandVoice===v.id?'#C9A84C':'#8899BB' }}>{v.label}</div>
+                      <div style={{ fontSize:10, color:blandVoice===v.id?'#8899BB':'#6B7A99', marginTop:1 }}>{v.desc}</div>
+                      {blandVoice===v.id && <div style={{ fontSize:9, color:'#C9A84C', marginTop:3 }}>✓</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={() => setTab('settings')} style={{ flex:1, padding:'8px', borderRadius:8, border:'1px solid #C9A84C', background:'transparent', fontSize:13, cursor:'pointer', color:'#C9A84C' }}>Edit persona</button>
+                <button onClick={async () => { if(!testCallPhone){ setTab('settings'); return } await sendTestCall() }}
+                  style={{ flex:1, padding:'8px', borderRadius:8, border:'none', background:'#C9A84C', color:'#0A1628', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                  {testCalling ? 'Calling...' : 'Test call'}
+                </button>
+              </div>
+            </div>
+            {/* Sofia card */}
+            <div style={{ border:`2px solid ${activeAgent==='sofia'?'#0A1628':'#DDE3F0'}`, borderRadius:12, padding:'1.25rem', background:'#fff', position:'relative' }}>
+              {activeAgent==='sofia' ? (
+                <div style={{ position:'absolute', top:14, right:14, background:'#EAF3DE', color:'#3B6D11', fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:20 }}>Active</div>
+              ) : (
+                <button onClick={() => activateAgent('sofia')}
+                  style={{ position:'absolute', top:12, right:12, fontSize:11, padding:'3px 12px', borderRadius:20, border:'1px solid #DDE3F0', background:'#F4F6FA', cursor:'pointer', color:'#555', fontWeight:500 }}>
+                  Set active
+                </button>
+              )}
+              <div style={{ width:52, height:52, borderRadius:'50%', background:'linear-gradient(135deg,#8B1A6B,#C9478A)', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:12 }}>
+                <span style={{ fontSize:22, fontWeight:700, color:'#fff' }}>S</span>
+              </div>
+              <div style={{ fontSize:18, fontWeight:700, color:'#1A2540', marginBottom:2 }}>Sofia</div>
+              <div style={{ fontSize:13, color:'#6B7A99', marginBottom:12 }}>Coordinadora de Logística &middot; {companyName}</div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
+                <span style={{ background:'#EEEDFE', color:'#4B3FA0', fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 }}>Voice: Maya</span>
+                <span style={{ background:'#FAEEDA', color:'#7A4F0D', fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 }}>Cálida y profesional</span>
+                <span style={{ background:'#FDE8F3', color:'#8B1A6B', fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 }}>Español</span>
+              </div>
+              <div style={{ background:'#F4F6FA', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#555', lineHeight:1.7, marginBottom:14 }}>
+                "Hola, soy <strong>Sofia</strong>, Coordinadora de Logística en {companyName}..."
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={() => activateAgent('sofia')}
+                  style={{ flex:1, padding:'8px', borderRadius:8, border:`1px solid ${activeAgent==='sofia'?'#8B1A6B':'#DDE3F0'}`, background: activeAgent==='sofia'?'rgba(139,26,107,0.08)':'#F4F6FA', fontSize:13, cursor:'pointer', color: activeAgent==='sofia'?'#8B1A6B':'#555', fontWeight: activeAgent==='sofia'?600:400 }}>
+                  {activeAgent==='sofia' ? 'Active' : 'Activate Sofia'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab==='settings' && (
+        <div style={{ background:'#fff', border:'1px solid #eee', borderRadius:10, padding:'1.25rem' }}>
+          <h3 style={{ margin:'0 0 1.25rem', fontWeight:500, fontSize:16 }}>Agent Settings</h3>
+          {/* Persona */}
+          <div style={{ marginBottom:'1.5rem' }}>
+            <div style={{ fontWeight:500, fontSize:15, marginBottom:12, paddingBottom:8, borderBottom:'1px solid #EEF0F5' }}>Agent Persona</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+              <div>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Agent name</label>
+                <input value={agentName} onChange={e => setAgentName(e.target.value)}
+                  placeholder="Marcus"
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13, boxSizing:'border-box' as any }} />
+              </div>
+              <div>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Role</label>
+                <input value={agentRole} onChange={e => setAgentRole(e.target.value)}
+                  placeholder="Logistics Coordinator"
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13, boxSizing:'border-box' as any }} />
+              </div>
+              <div>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Company name</label>
+                <input value={companyName} onChange={e => setCompanyName(e.target.value)}
+                  placeholder="Mamba Enterprises"
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13, boxSizing:'border-box' as any }} />
+              </div>
+              <div>
+                <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Tone</label>
+                <select value={agentTone} onChange={e => setAgentTone(e.target.value)}
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13, boxSizing:'border-box' as any }}>
+                  {['confident and direct, with warmth','professional and formal','friendly and conversational','energetic and enthusiastic','calm and reassuring'].map(t => (
+                    <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div style={{ background:'#F4F6FA', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#555', lineHeight:1.7 }}>
+              <strong style={{ color:'#1A2540' }}>Preview:</strong> "Hi, this is <strong>{agentName}</strong>, {agentRole} at <strong>{companyName}</strong>. We help South Florida facilities with same-day courier routes..."
+            </div>
+          </div>
+
+
+          <div style={{ background:'#F4F6FA', border:'1px solid #DDE3F0', borderRadius:10, padding:'1rem 1.25rem', marginBottom:'1rem' }}>
+            <div style={{ fontWeight:500, marginBottom:4 }}>Hear it on your phone</div>
+            <div style={{ fontSize:13, color:'#666', marginBottom:10 }}>Enter your number and we will call you using the selected voice so you can hear exactly how it sounds on a real call.</div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <input value={testCallPhone} onChange={e => setTestCallPhone(e.target.value)}
+                placeholder="+1 954 555 0000"
+                style={{ flex:1, minWidth:180, padding:'8px 10px', borderRadius:6, border:'1px solid #ddd', fontSize:13 }} />
+              <button onClick={sendTestCall} disabled={testCalling}
+                style={btn({ background:'#1A2540', color:'#fff', borderColor:'#1A2540', fontWeight:500 })}>
+                {testCalling ? 'Calling...' : 'Test call'}
+              </button>
+            </div>
+          </div>
+          <button onClick={saveSettings} disabled={savingSettings}
+            style={btn({ background:'#0A1628', color:'#C9A84C', borderColor:'#0A1628', fontWeight:500 })}>
+            {savingSettings ? 'Saving…' : 'Save settings'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
